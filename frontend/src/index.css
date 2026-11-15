@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  color: #10223c;
+  background: #f8fafb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --navy: #102641;
+  --green: #087b63;
+  --green-dark: #05644f;
+  --mint: #e3f4ed;
+  --muted: #627086;
+  --line: #e4eaf0;
+  --paper: #fff;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background-color: #f8fafb;
+    color: #10223c;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  /* Exact focus ring specified: 3px solid #90cfc0, outline-offset 2px */
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 3px solid #90cfc0;
+    outline-offset: 2px;
+  }
+}
+
+@keyframes brandDotPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 1px rgba(8, 123, 99, 0.4));
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.95;
+    filter: drop-shadow(0 0 6px rgba(8, 123, 99, 0.75));
+  }
+}
+
+.animate-brand-dot {
+  animation: brandDotPulse 2.4s ease-in-out infinite;
+}
+

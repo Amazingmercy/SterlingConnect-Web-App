@@ -1,0 +1,653 @@
+// Prisma Schema for Sterling Connect
+// Database: MySQL (TiDb for development)
+// Spec: Sterling_Connect_Readiness_Developer_Logic_Workbook.xlsx
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+  logging  = false
+}
+
+// ==========================================
+// 1. ACCOUNTS & USERS
+// ==========================================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Pathway {
+  EMPLOYMENT
+  SCHOLARSHIP
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id                          String      @id @default(uuid())
+  email                       String      @unique
+  passwordHash                String
+  firstName                   String
+  lastName                    String
+  role                        UserRole    @default(USER)
+  status                      UserStatus  @default(PENDING_VERIFICATION)
+  
+  // Pathway selection: strictly one active pathway at a time, switchable
+  activePathway               Pathway     @default(EMPLOYMENT)
+  
+  // Mandatory Assessment Gate (FR-03: Onboarding only until assessment is completed)
+  hasCompletedAssessment      Boolean     @default(false)
+  lastAssessmentCompletedAt   DateTime?
+  
+  // Verification & Security
+  isEmailVerified             Boolean     @default(false)
+  emailVerificationToken      String?     @unique
+  emailVerificationExpiresAt  DateTime?
+  passwordResetToken          String?     @unique
+  passwordResetExpiresAt      DateTime?
+  refreshTokenHash            String?
+  
+  // Timestamps
+  createdAt                   DateTime    @default(now())
+  updatedAt                   DateTime    @updatedAt
+
+  // Relations
+  commonProfile               CommonProfile?
+  employmentProfile           EmploymentProfile?
+  scholarshipProfile          ScholarshipProfile?
+  documents                   UserDocument[]
+  assessmentAttempts          AssessmentAttempt[]
+  savedOpportunities          SavedOpportunity[]
+  applications                Application[]
+  notifications               Notification[]
+  auditLogs                   AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@index([activePathway])
+  @@index([hasCompletedAssessment])
+}
+
+// ==========================================
+// 2. USER PROFILES
+// ==========================================
+
+model CommonProfile {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Core matching & demographic fields per Data Model
+  locationCountry       String    // Residence country
+  nationalities         Json      // string array e.g. ["Nigeria", "Ghana"]
+  educationLevel        String?   // e.g. "Undergraduate", "Postgraduate", "High School"
+  highestQualification  String    // e.g. "Bachelor's Degree", "Master's Degree"
+  qualification         String?   // e.g. "B.Sc Computer Science"
+  fieldOfStudy          String
+  experienceYears       Float     @default(0.0)
+  interests             Json?     // string array of interest areas
+  preferredCountries    Json?     // string array of preferred destinations
+  currentStatus         String?   // e.g. "Employed", "Recent Graduate", "Final Year Student"
+  graduationYear        Int?
+  profileCompletion     Float     @default(0.0) // 0 - 100 percentage
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+enum WorkArrangement {
+  REMOTE
+  HYBRID
+  ONSITE
+  ANY
+}
+
+model EmploymentProfile {
+  id                    String          @id @default(uuid())
+  userId                String          @unique
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  employmentStatus      String?         // e.g. "Employed full-time", "Seeking opportunity"
+  yearsOfExperience     Float           @default(0.0)
+  careerLevel           String          // e.g. "Entry-level", "Mid-level", "Senior", "Executive"
+  sectorsOfInterest     Json            // array of taxonomy codes or names
+  functionsOfInterest   Json            // array of job families
+  skills                Json            // array of skill strings
+  preferredLocations    Json            // array of countries/cities
+  workArrangement       WorkArrangement @default(ANY)
+  opportunityTypes      Json            // array e.g. ["Full-time", "Internship", "Graduate programme"]
+  workAuthorisation     Json            // array of countries with legal right to work
+  
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+enum FundingRequirement {
+  FULLY_FUNDED
+  PARTIAL
+  ANY
+}
+
+model ScholarshipProfile {
+  id                    String              @id @default(uuid())
+  userId                String              @unique
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  desiredStudyLevels    Json                // array e.g. ["Master's", "PhD"]
+  desiredFields         Json                // array of target study fields
+  academicClassification String             // e.g. "First Class Honours", "Upper Second Class (2:1)", "GPA 3.8/4.0"
+  preferredStudyCountries Json              // array of destination countries
+  fundingRequirement    FundingRequirement  @default(FULLY_FUNDED)
+  intendedStartYear     Int?
+  languageTestStatus    String?             // e.g. "IELTS 7.5 completed", "Exempt", "Planning to take"
+  researchInterests     String?             @db.Text
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+}
+
+enum DocumentType {
+  CV_RESUME
+  ACADEMIC_TRANSCRIPT
+  OTHER
+}
+
+model UserDocument {
+  id                    String        @id @default(uuid())
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  documentType          DocumentType  @default(CV_RESUME)
+  originalFileName      String
+  storedFileName        String        // Obfuscated UUID + extension on server disk
+  mimeType              String
+  fileSizeBytes         Int
+  storagePath           String        // Protected server uploads path
+  
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([userId])
+}
+
+// ==========================================
+// 3. UNIVERSAL READINESS ENGINE (10 CATEGORIES)
+// ==========================================
+
+enum AssessmentVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model AssessmentVersion {
+  id                    String                  @id @default(uuid())
+  versionNumber         String                  @unique // e.g. "1.0", "1.1"
+  status                AssessmentVersionStatus @default(DRAFT)
+  title                 String                  @default("Sterling Universal 10-Category Readiness Assessment")
+  description           String?                 @db.Text
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  questions             AssessmentQuestion[]
+  attempts              AssessmentAttempt[]
+
+  @@index([status])
+}
+
+model AcademyCategory {
+  id                    String                @id // e.g. "CAT-01", "CAT-02", ... "CAT-10"
+  name                  String                // Category Name e.g. "Career Development & Employability"
+  description           String?               @db.Text
+  displayOrder          Int                   @default(1)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  questions             AssessmentQuestion[]
+  courses               AcademyCourse[]
+
+  @@index([displayOrder])
+}
+
+model AssessmentQuestion {
+  id                    String                @id @default(uuid())
+  versionId             String
+  version               AssessmentVersion     @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  
+  questionCode          String                // "Q01" to "Q50"
+  categoryId            String                // "CAT-01" to "CAT-10"
+  category              AcademyCategory       @relation(fields: [categoryId], references: [id])
+  categoryName          String                // Denormalized for display
+  orderIndex            Int                   // 1 to 50
+  orderInCategory       Int                   // 1 to 5
+  statement             String                @db.Text
+  construct             String                @default("Self-report capability")
+  isActive              Boolean               @default(true)
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  responses             AssessmentResponse[]
+
+  @@unique([versionId, questionCode])
+  @@index([versionId])
+  @@index([categoryId])
+  @@index([orderIndex])
+}
+
+enum AssessmentAttemptStatus {
+  DRAFT       // Progress saved (e.g. 27 of 50 responses); dashboard gate remains locked
+  COMPLETED   // Atomically scored (exactly 50 responses); dashboard unlocked
+}
+
+enum ReadinessBand {
+  EMERGING     // 0 <= score < 25
+  FOUNDATIONAL // 25 <= score < 50
+  DEVELOPING   // 50 <= score < 75
+  PROFICIENT   // 75 <= score <= 100
+}
+
+model AssessmentAttempt {
+  id                    String                  @id @default(uuid())
+  userId                String
+  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versionId             String
+  version               AssessmentVersion       @relation(fields: [versionId], references: [id])
+  
+  status                AssessmentAttemptStatus @default(DRAFT)
+  overallScore          Float?                  // 0 - 100 average across all 10 categories
+  isLatest              Boolean                 @default(true)
+  completedAt           DateTime?
+  
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  responses             AssessmentResponse[]
+  categoryScores        AssessmentCategoryScore[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([isLatest])
+}
+
+model AssessmentResponse {
+  id                    String              @id @default(uuid())
+  attemptId             String
+  attempt               AssessmentAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId            String
+  question              AssessmentQuestion  @relation(fields: [questionId], references: [id])
+  
+  // Standardized Likert scale: 1=Not yet able, 2=Beginning, 3=Developing, 4=Independent, 5=Proficient
+  response              Int                 // validated server-side in [1, 5]
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model AssessmentCategoryScore {
+  id                    String              @id @default(uuid())
+  attemptId             String
+  attempt               AssessmentAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  
+  categoryId            String              // "CAT-01" to "CAT-10"
+  categoryName          String
+  rawTotal              Int                 // Sum of 5 answers (5 to 25)
+  scorePercent          Float               // Formula: ((rawTotal - 5) / 20) * 100 -> range [0, 100]
+  readinessBand         ReadinessBand       // Emerging, Foundational, Developing, Proficient
+  lowResponseCount      Int                 // Count of responses <= 2 for deterministic tie-break
+  priorityRank          Int                 // Deterministic tie-break rank 1 to 10
+  isTopPriority         Boolean             @default(false) // True for exactly the top 3 priority categories
+  
+  createdAt             DateTime            @default(now())
+
+  @@unique([attemptId, categoryId])
+  @@index([attemptId])
+  @@index([priorityRank])
+  @@index([isTopPriority])
+}
+
+// ==========================================
+// 4. ACADEMY CATALOGUE & RECOMMENDATION LOGIC
+// ==========================================
+
+enum CourseLevel {
+  ESSENTIALS
+  FUNDAMENTALS
+  ADVANCED
+}
+
+model AcademyCourse {
+  id                    String              @id @default(uuid())
+  courseCode            String              @unique // Real Academy course identifier
+  title                 String
+  categoryId            String              // FK to AcademyCategory (CAT-01 to CAT-10)
+  category              AcademyCategory     @relation(fields: [categoryId], references: [id])
+  level                 CourseLevel         @default(ESSENTIALS)
+  isPublished           Boolean             @default(true)
+  priceNGN              Decimal             @default(0.0) @db.Decimal(10, 2)
+  isFree                Boolean             @default(true) // Always true for CAT-02 (Scholarships)
+  duration              String?             // e.g. "4 weeks", "6 hours"
+  enrollmentUrl         String              // Direct link to learn.sterlinglrs.com
+  prerequisiteCourseIds Json?               // Array of prerequisite course IDs
+  mappingStatus         String?             @default("Confirmed")
+  notes                 String?             @db.Text
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([categoryId])
+  @@index([level])
+  @@index([isPublished])
+  @@index([isFree])
+}
+
+// ==========================================
+// 5. OPPORTUNITY ENGINE
+// ==========================================
+
+enum OpportunityType {
+  EMPLOYMENT
+  SCHOLARSHIP
+}
+
+enum OpportunityStatus {
+  DRAFT
+  PUBLISHED
+  EXPIRED
+  ARCHIVED
+}
+
+model Opportunity {
+  id                    String              @id @default(uuid())
+  referenceCode         String              @unique // e.g. "EMP-0001", "SCH-0001"
+  opportunityType       OpportunityType
+  title                 String
+  organization          String              // Employer or Scholarship Provider name
+  country               String
+  location              String              // City or "Global"
+  status                OpportunityStatus   @default(DRAFT)
+  
+  openingDate           DateTime?
+  deadline              DateTime
+  applicationUrl        String              // Official external website application link
+  sourceUrl             String?             // Official provider listing page
+  lastVerifiedAt        DateTime            @default(now())
+  
+  overview              String              @db.Text
+  requirements          String              @db.Text
+  isFeatured            Boolean             @default(false)
+  
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  // Detail extensions (1-to-1)
+  employmentDetail      EmploymentOpportunityDetail?
+  scholarshipDetail     ScholarshipOpportunityDetail?
+  
+  // User interactions
+  savedByUsers          SavedOpportunity[]
+  applications          Application[]
+
+  @@index([opportunityType])
+  @@index([status])
+  @@index([deadline])
+  @@index([country])
+}
+
+model EmploymentOpportunityDetail {
+  id                    String          @id @default(uuid())
+  opportunityId         String          @unique
+  opportunity           Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  
+  subType               String          // Graduate Programme, Full-time, Internship, Fellowship
+  sector                String          // Taxonomy sector
+  function              String          // Taxonomy job family
+  workArrangement       WorkArrangement @default(ONSITE)
+  experienceLevel       String          // Entry, Mid, Senior, Executive
+  minimumEducation      String          // High School, Bachelor, Master, PhD
+  eligibleNationalities Json            // array or ["Any"]
+  requiredSkills        Json            // array of skill strings
+  compensationRange     String?
+}
+
+enum FundingLevel {
+  FULLY_FUNDED
+  PARTIAL_TUITION
+  STIPEND_ONLY
+  VARIABLE
+}
+
+model ScholarshipOpportunityDetail {
+  id                    String          @id @default(uuid())
+  opportunityId         String          @unique
+  opportunity           Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  
+  studyLevels           Json            // array e.g. ["Master's", "PhD"]
+  eligibleNationalities Json            // array or ["All"]
+  eligibleFields        Json            // array of fields or ["All Fields"]
+  academicRequirement   String?         // e.g. "First Class or 2:1 equivalent"
+  experienceRequirement String?         // e.g. "Minimum 2 years professional experience"
+  fundingLevel          FundingLevel    @default(FULLY_FUNDED)
+  languageRequirement   String?         // e.g. "IELTS 6.5 or equivalent"
+  programStartYear      Int?
+}
+
+// ==========================================
+// 6. SAVED ITEMS & APPLICATION TRACKER
+// ==========================================
+
+model SavedOpportunity {
+  id                    String          @id @default(uuid())
+  userId                String
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunityId         String
+  opportunity           Opportunity     @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime        @default(now())
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+}
+
+enum ApplicationStatus {
+  SAVED
+  PREPARING
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER_SUCCESSFUL // Employment outcome
+  AWARDED          // Scholarship outcome
+  UNSUCCESSFUL     // Outcome
+  WITHDRAWN
+}
+
+model Application {
+  id                    String                    @id @default(uuid())
+  userId                String
+  user                  User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunityId         String
+  opportunity           Opportunity               @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  
+  status                ApplicationStatus         @default(SAVED)
+  appliedAt             DateTime?
+  outcomeAt             DateTime?
+  notes                 String?                   @db.Text
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  statusHistory         ApplicationStatusHistory[]
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+  @@index([status])
+}
+
+model ApplicationStatusHistory {
+  id                    String            @id @default(uuid())
+  applicationId         String
+  application           Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  fromStatus            ApplicationStatus?
+  toStatus              ApplicationStatus
+  notes                 String?
+  changedAt             DateTime          @default(now())
+
+  @@index([applicationId])
+}
+
+// ==========================================
+// 7. TAXONOMIES & CONTROLLED VOCABULARY
+// ==========================================
+
+enum TaxonomyType {
+  SECTOR
+  FUNCTION
+  SKILL
+  STUDY_FIELD
+  COUNTRY
+  DEGREE_LEVEL
+}
+
+model Taxonomy {
+  id                    String            @id @default(uuid())
+  type                  TaxonomyType
+  code                  String            @unique // e.g. "SEC_TECH", "SKILL_PYTHON"
+  name                  String
+  parentCode            String?
+  isActive              Boolean           @default(true)
+  
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  aliases               TaxonomyAlias[]
+
+  @@index([type])
+  @@index([isActive])
+}
+
+model TaxonomyAlias {
+  id                    String            @id @default(uuid())
+  taxonomyId            String
+  taxonomy              Taxonomy          @relation(fields: [taxonomyId], references: [id], onDelete: Cascade)
+  
+  alias                 String            @unique
+
+  @@index([taxonomyId])
+}
+
+// ==========================================
+// 8. NOTIFICATIONS & EMAIL AUDIT
+// ==========================================
+
+enum NotificationType {
+  DEADLINE_REMINDER
+  STATUS_UPDATE
+  ASSESSMENT_RESULT
+  SYSTEM_ANNOUNCEMENT
+}
+
+model Notification {
+  id                    String            @id @default(uuid())
+  userId                String
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title                 String
+  message               String            @db.Text
+  type                  NotificationType  @default(DEADLINE_REMINDER)
+  actionUrl             String?
+  isRead                Boolean           @default(false)
+  
+  createdAt             DateTime          @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id                    String            @id @default(uuid())
+  recipientEmail        String
+  triggerType           String            // e.g. "ACCOUNT_VERIFICATION", "DEADLINE_CLOSING_7D"
+  subject               String
+  status                EmailStatus       @default(QUEUED)
+  errorMessage          String?
+  sentAt                DateTime?
+  
+  createdAt             DateTime          @default(now())
+
+  @@index([recipientEmail])
+  @@index([status])
+}
+
+// ==========================================
+// 9. AUDIT LOG & COMPLIANCE (FR-18)
+// ==========================================
+
+model AuditLog {
+  id                    String            @id @default(uuid())
+  userId                String?
+  user                  User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  action                String            // e.g. "ASSESSMENT_SUBMITTED", "PATHWAY_CHANGED"
+  entityType            String            // e.g. "AssessmentAttempt", "User", "Opportunity"
+  entityId              String?
+  payload               Json?             // Note: No sensitive individual assessment answers in payload
+  ipAddress             String?
+  
+  createdAt             DateTime          @default(now())
+
+  @@index([action])
+  @@index([entityType])
+}
+
+// ==========================================
+// 10. RECOMMENDATION RULES & SYSTEM SETTINGS
+// ==========================================
+
+model RecommendationRule {
+  id            String   @id @default(uuid())
+  categoryId    String   // e.g. "CAT-01"
+  readinessBand String   // "EMERGING" | "FOUNDATIONAL" | "DEVELOPING" | "PROFICIENT"
+  courseCode    String   // e.g. "SA-011"
+  ruleName      String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([categoryId])
+  @@index([courseCode])
+  @@index([isActive])
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  category  String   @default("GENERAL")
+  isSecret  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
