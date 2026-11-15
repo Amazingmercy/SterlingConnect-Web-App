@@ -1,0 +1,66 @@
+services:
+  # ==========================================================
+  # 1. Backend Web Service (NestJS API + Prisma)
+  # ==========================================================
+  - type: web
+    name: sterling-connect-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false # Paste your remote MySQL / TiDB Cloud connection string
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: UPLOAD_DESTINATION
+        value: ./src/uploads
+      - key: MAX_FILE_SIZE_BYTES
+        value: 5242880
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: 465
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_USER
+        sync: false # Your email address
+      - key: SMTP_APP_PASSWORD
+        sync: false # Your Google App Password
+      - key: SMTP_FROM_NAME
+        value: Sterling Connect
+      - key: SMTP_FROM_EMAIL
+        sync: false # Your email address
+      - key: STERLING_ACADEMY_BASE_URL
+        value: https://learn.sterlinglrs.com
+      - key: FRONTEND_URL
+        sync: false # Set to your deployed frontend URL (e.g. https://sterling-connect.onrender.com)
+
+  # ==========================================================
+  # 2. Frontend Static Site (React 18 + Vite SPA)
+  # ==========================================================
+  - type: web
+    name: sterling-connect-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false # Set to your deployed backend URL (e.g. https://sterling-connect-api.onrender.com/api)

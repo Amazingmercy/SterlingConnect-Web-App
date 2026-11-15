@@ -61,7 +61,7 @@
 |---|---|
 | **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Lucide React, KaTeX (LaTeX math), React Router DOM v6 |
 | **Backend** | NestJS, TypeScript, Prisma ORM, Passport JWT, Bcrypt, Class-Validator, Node Mailer |
-| **Database** | MySQL / TiDB Cloud Serverless (distributed, scalable SQL) |
+| **Database** | MySQL  (distributed, scalable SQL) |
 | **Email Service** | Google Workspace SMTP / Transactional Mailer |
 | **Security** | Strict JWT Access & Refresh Token rotation, HTTP-only Cookie support, Role-based guards, masked environment secrets |
 
