@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
@@ -22,11 +22,11 @@ export const SignInPage: React.FC = () => {
 
   const isSessionExpired = location.search.includes('expired=true') || Boolean(location.state?.sessionExpired);
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(isSessionExpired ? 'Your session has ended. Sign in again to continue.' : '');
-  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -36,18 +36,24 @@ export const SignInPage: React.FC = () => {
   const [isResetSubmitting, setIsResetSubmitting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
+  // Auto-clear flash error message after 5 seconds
+  useEffect(() => {
+    if (!error) return;
+    const timer = setTimeout(() => {
+      setError('');
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setEmailError('');
+    setUsernameError('');
     setPasswordError('');
 
     let hasError = false;
-    if (!email.trim()) {
-      setEmailError('Complete this field to continue.');
-      hasError = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setEmailError('Enter a valid email address.');
+    if (!username.trim()) {
+      setUsernameError('Enter your Sterling username to continue.');
       hasError = true;
     }
 
@@ -62,18 +68,18 @@ export const SignInPage: React.FC = () => {
     }
 
     setIsLoading(true);
-    const res = await login({ email, password });
+    const res = await login({ username: username.trim(), password });
     setIsLoading(false);
 
     if (res.success) {
-      if (!res.user?.isEmailVerified) {
-        navigate('/verify-email');
-        return;
-      }
       toast('Signed in successfully!');
       navigate('/dashboard');
     } else {
-      setError('We couldn’t sign you in with those details. Check your email and password.');
+      const errorMsg =
+        res.error ||
+        'Invalid username or password. If you do not have an account yet, please register';
+      setError(errorMsg);
+      toast(errorMsg, 'error');
     }
   };
 
@@ -102,24 +108,32 @@ export const SignInPage: React.FC = () => {
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[12px] font-medium leading-relaxed">
-            {error}
+          <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-[13px] font-medium leading-relaxed flex items-center justify-between gap-3 animate-in fade-in duration-200 shadow-xs">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="text-red-400 hover:text-red-600 transition-colors p-1 rounded-md"
+              aria-label="Dismiss error"
+            >
+              <X size={15} />
+            </button>
           </div>
         )}
 
         {/* Sign In Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Email address"
-            type="email"
+            label="Username"
+            type="text"
             required
-            placeholder="you@example.com"
-            value={email}
+            placeholder="Enter your Sterling username"
+            value={username}
             onChange={(e) => {
-              setEmail(e.target.value);
-              if (emailError) setEmailError('');
+              setUsername(e.target.value);
+              if (usernameError) setUsernameError('');
             }}
-            error={emailError}
+            error={usernameError}
           />
 
           <div className="space-y-1">
@@ -176,18 +190,22 @@ export const SignInPage: React.FC = () => {
           </div>
         </form>
 
-        {/* Foot - Exact Copy */}
+        {/* Foot */}
         <div className="pt-4 border-t border-[#edf0f3] text-center text-[12px] text-[#627086] space-y-2">
           <div>
-            New to Sterling Connect?{' '}
-            <Link to="/register" className="font-bold text-[#087b63] hover:underline">
-              Create an account.
-            </Link>
+            Need a Sterling account?{' '}
+            <a
+              href="https://sterlinglrs.com/student-registration"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#087b63] hover:underline"
+            >
+              Register Here.
+            </a>
           </div>
 
-          {/* Academy Note - Exact Copy */}
           <div className="text-[11px] text-[#627086]">
-            Sterling Academy may ask you to sign in separately.
+            Sign in with your Sterling Academy username and password.
           </div>
         </div>
       </div>
@@ -229,9 +247,6 @@ export const SignInPage: React.FC = () => {
               onChange={(e) => setResetEmail(e.target.value)}
             />
 
-            <div className="text-[11px] text-[#627086]">
-              Sterling Academy may ask you to sign in separately.
-            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button

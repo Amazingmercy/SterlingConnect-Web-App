@@ -60,6 +60,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, []);
 
+  // Wipe notifications in memory whenever the active user changes
+  useEffect(() => {
+    setNotifications([]);
+  }, [user?.id]);
+
   const fetchNotifications = useCallback(async () => {
     if (!user) {
       setNotifications([]);

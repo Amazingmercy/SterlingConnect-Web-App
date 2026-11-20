@@ -15,38 +15,38 @@ const getUserProfileKey = (userId?: string) =>
 const LEGACY_PROFILE_KEY = 'sterling_connect_profile_v2';
 
 export const INITIAL_COMMON: CommonProfileData = {
-  countryOfResidence: 'Nigeria',
-  nationalities: ['Nigerian'],
-  currentStatus: 'Recent Graduate',
-  highestQualification: 'Bachelor’s degree',
-  fieldOfStudy: 'Economics',
+  countryOfResidence: '',
+  nationalities: [],
+  currentStatus: '',
+  highestQualification: '',
+  fieldOfStudy: '',
   institution: '',
-  graduationYear: new Date().getFullYear().toString(),
-  academicClassification: 'First Class Honours (or equivalent)',
+  graduationYear: '',
+  academicClassification: '',
   cvDocument: null,
 };
 
 export const INITIAL_EMPLOYMENT: EmploymentProfileData = {
-  employmentStatus: 'Seeking opportunity',
-  yearsOfExperience: '1-2',
-  careerLevel: 'Entry-level',
-  sectorsOfInterest: ['Technology & Software', 'Finance & Banking', 'Development & Non-Profit'],
-  functionsOfInterest: ['Operations & Project Management', 'Product & Design', 'Data & Analytics'],
-  skills: ['Project Management', 'Research & Analysis', 'Communication', 'Strategic Planning'],
-  preferredLocations: ['Nigeria', 'United Kingdom', 'Remote (Global)'],
+  employmentStatus: '',
+  yearsOfExperience: '',
+  careerLevel: '',
+  sectorsOfInterest: [],
+  functionsOfInterest: [],
+  skills: [],
+  preferredLocations: [],
   workArrangement: 'HYBRID',
-  opportunityTypes: ['Graduate programme', 'Full-time', 'Fellowship'],
-  workAuthorisation: ['Nigeria'],
+  opportunityTypes: [],
+  workAuthorisation: [],
 };
 
 export const INITIAL_SCHOLARSHIP: ScholarshipProfileData = {
-  desiredStudyLevels: ["Master's Degree"],
-  desiredFields: ['Economics & Public Policy', 'Development Studies', 'Data Science & AI'],
-  academicClassification: 'First Class Honours (GPA 3.8/4.0+)',
-  preferredStudyCountries: ['United Kingdom', 'United States', 'Canada', 'Germany'],
+  desiredStudyLevels: [],
+  desiredFields: [],
+  academicClassification: '',
+  preferredStudyCountries: [],
   fundingRequirement: 'FULLY_FUNDED',
-  intendedStartYear: (new Date().getFullYear() + 1).toString(),
-  languageTestStatus: 'Planning to take (IELTS / TOEFL)',
+  intendedStartYear: '',
+  languageTestStatus: '',
   researchInterests: [],
 };
 
@@ -145,6 +145,18 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return;
     }
 
+    const defaultCommon: CommonProfileData = {
+      ...INITIAL_COMMON,
+      countryOfResidence: user.country || '',
+      nationalities: user.nationality ? [user.nationality] : [],
+    };
+
+    // Clean reset immediately for this specific user to eliminate any state leakage
+    setCommon(defaultCommon);
+    setEmployment(INITIAL_EMPLOYMENT);
+    setScholarship(INITIAL_SCHOLARSHIP);
+    setDocuments([]);
+
     const profileKey = getUserProfileKey(user.id);
 
     // Initial local read for this specific user
@@ -165,49 +177,81 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (res.data?.profile) {
           const p = res.data.profile;
           if (p.common) {
-            setCommon((prev) => ({
-              ...prev,
-              countryOfResidence: p.common.locationCountry || prev.countryOfResidence,
-              nationalities: p.common.nationalities || prev.nationalities,
-              currentStatus: p.common.currentStatus || prev.currentStatus,
-              highestQualification: p.common.highestQualification || prev.highestQualification,
-              fieldOfStudy: p.common.fieldOfStudy || prev.fieldOfStudy,
-              graduationYear: p.common.graduationYear?.toString() || prev.graduationYear,
-            }));
+            setCommon({
+              countryOfResidence: p.common.locationCountry || user.country || '',
+              nationalities:
+                Array.isArray(p.common.nationalities) && p.common.nationalities.length > 0
+                  ? p.common.nationalities
+                  : (user.nationality ? [user.nationality] : []),
+              currentStatus: p.common.currentStatus || '',
+              highestQualification: p.common.highestQualification || '',
+              fieldOfStudy: p.common.fieldOfStudy || '',
+              graduationYear: p.common.graduationYear?.toString() || '',
+              academicClassification: p.common.academicClassification || '',
+              institution: p.common.institution || '',
+              cvDocument: p.common.cvDocument || null,
+            });
+          } else {
+            setCommon(defaultCommon);
           }
+
           if (p.employment) {
-            setEmployment((prev) => ({
-              ...prev,
-              employmentStatus: p.employment.employmentStatus ?? prev.employmentStatus,
-              yearsOfExperience: p.employment.yearsOfExperience !== undefined ? String(p.employment.yearsOfExperience) : prev.yearsOfExperience,
-              careerLevel: p.employment.careerLevel ?? prev.careerLevel,
+            setEmployment({
+              employmentStatus: p.employment.employmentStatus || '',
+              yearsOfExperience:
+                p.employment.yearsOfExperience !== undefined && p.employment.yearsOfExperience !== null
+                  ? String(p.employment.yearsOfExperience)
+                  : '',
+              careerLevel: p.employment.careerLevel || '',
+              sector_preference_mode: p.employment.sector_preference_mode,
+              sector_ids: Array.isArray(p.employment.sector_ids) ? p.employment.sector_ids : [],
               sectorsOfInterest: Array.isArray(p.employment.sectorsOfInterest)
                 ? p.employment.sectorsOfInterest
-                : prev.sectorsOfInterest,
+                : [],
+              function_preference_mode: p.employment.function_preference_mode,
+              function_ids: Array.isArray(p.employment.function_ids) ? p.employment.function_ids : [],
               functionsOfInterest: Array.isArray(p.employment.functionsOfInterest)
                 ? p.employment.functionsOfInterest
-                : prev.functionsOfInterest,
-              skills: Array.isArray(p.employment.skills)
-                ? p.employment.skills
-                : prev.skills,
+                : [],
+              skills: Array.isArray(p.employment.skills) ? p.employment.skills : [],
               preferredLocations: Array.isArray(p.employment.preferredLocations)
                 ? p.employment.preferredLocations
-                : prev.preferredLocations,
-              workArrangement: p.employment.workArrangement ?? prev.workArrangement,
+                : [],
+              workArrangement: p.employment.workArrangement || 'HYBRID',
               opportunityTypes: Array.isArray(p.employment.opportunityTypes)
                 ? p.employment.opportunityTypes
-                : prev.opportunityTypes,
-              workAuthorisation: p.employment.workAuthorisation ?? prev.workAuthorisation,
-            }));
+                : [],
+              workAuthorisation: Array.isArray(p.employment.workAuthorisation)
+                ? p.employment.workAuthorisation
+                : [],
+            });
+          } else {
+            setEmployment(INITIAL_EMPLOYMENT);
           }
+
           if (p.scholarship) {
-            setScholarship((prev) => ({
-              ...prev,
-              desiredStudyLevels: p.scholarship.desiredStudyLevels || prev.desiredStudyLevels,
-              desiredFields: p.scholarship.desiredFields || prev.desiredFields,
-              academicClassification: p.scholarship.academicClassification || prev.academicClassification,
-              preferredStudyCountries: p.scholarship.preferredStudyCountries || prev.preferredStudyCountries,
-            }));
+            setScholarship({
+              desiredStudyLevels: Array.isArray(p.scholarship.desiredStudyLevels)
+                ? p.scholarship.desiredStudyLevels
+                : [],
+              desiredFields: Array.isArray(p.scholarship.desiredFields)
+                ? p.scholarship.desiredFields
+                : [],
+              academicClassification: p.scholarship.academicClassification || '',
+              preferredStudyCountries: Array.isArray(p.scholarship.preferredStudyCountries)
+                ? p.scholarship.preferredStudyCountries
+                : [],
+              noPreferredCountry: Boolean(p.scholarship.noPreferredCountry),
+              fundingRequirement: p.scholarship.fundingRequirement || 'FULLY_FUNDED',
+              intendedStartYear: p.scholarship.intendedStartYear || '',
+              languageTestStatus: p.scholarship.languageTestStatus || '',
+              researchInterests: Array.isArray(p.scholarship.researchInterests)
+                ? p.scholarship.researchInterests
+                : [],
+              dateOfBirth: p.scholarship.dateOfBirth || '',
+            });
+          } else {
+            setScholarship(INITIAL_SCHOLARSHIP);
           }
         }
       } catch {

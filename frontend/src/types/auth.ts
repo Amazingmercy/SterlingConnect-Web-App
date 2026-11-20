@@ -10,13 +10,14 @@ export interface User {
   email: string;
   firstName: string;
   lastName: string;
-  country: string;
+  country?: string;
   nationality: string;
   isEmailVerified: boolean;
   hasCompletedAssessment?: boolean;
   role?: 'USER' | 'ADMIN' | 'SUPER_ADMIN';
   pathway?: PathwayType;
   primaryGoal?: PathwayType;
+  hasSelectedPathway?: boolean;
   createdAt: string;
 }
 
@@ -24,7 +25,7 @@ export interface RegisterFormData {
   firstName: string;
   lastName: string;
   email: string;
-  country: string;
+  country?: string;
   nationality: string;
   password: string;
   agreeToTerms: boolean;
@@ -32,7 +33,8 @@ export interface RegisterFormData {
 }
 
 export interface LoginFormData {
-  email: string;
+  username: string;
+  email?: string;
   password: string;
   rememberMe?: boolean;
 }

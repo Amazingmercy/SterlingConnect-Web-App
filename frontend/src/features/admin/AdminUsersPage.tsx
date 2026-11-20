@@ -33,6 +33,8 @@ export const AdminUsersPage: React.FC = () => {
 
   // Delete User confirmation
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
 
   // Modal confirmations for status & role
   const [statusModalTarget, setStatusModalTarget] = useState<{ user: any; newStatus: string } | null>(null);
@@ -44,6 +46,7 @@ export const AdminUsersPage: React.FC = () => {
   const fetchUsers = async (page = 1) => {
     setIsLoading(true);
     setActionError(null);
+    setSelectedIds([]);
     try {
       const params = new URLSearchParams();
       params.set('page', String(page));
@@ -119,6 +122,39 @@ export const AdminUsersPage: React.FC = () => {
       fetchUsers(pagination.page);
     } catch (err: any) {
       setActionError(err.response?.data?.message || 'Failed to update user role.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const selectableUsers = users.filter((u) => u.id !== currentUser?.id && u.role !== 'SUPER_ADMIN');
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === selectableUsers.length && selectableUsers.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(selectableUsers.map((u) => u.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteUsers = async () => {
+    if (selectedIds.length === 0) return;
+    setIsProcessing(true);
+    setActionError(null);
+    try {
+      const res = await api.post('/admin/users/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} users.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchUsers(pagination.page);
+    } catch (err: any) {
+      setActionError(err.response?.data?.message || 'Failed to delete selected users.');
     } finally {
       setIsProcessing(false);
     }
@@ -220,6 +256,32 @@ export const AdminUsersPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'user' : 'users'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -235,6 +297,15 @@ export const AdminUsersPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectableUsers.length > 0 && selectedIds.length === selectableUsers.length}
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all eligible users"
+                    />
+                  </th>
                   <th className="py-3 px-4">Candidate / User</th>
                   <th className="py-3 px-4">Role</th>
                   <th className="py-3 px-4">Status</th>
@@ -248,8 +319,26 @@ export const AdminUsersPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
+                  const isSelectable = !isSelf && u.role !== 'SUPER_ADMIN';
                   return (
-                    <tr key={u.id} className="hover:bg-slate-50 transition">
+                    <tr
+                      key={u.id}
+                      className={`hover:bg-slate-50 transition ${
+                        selectedIds.includes(u.id) ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-3 w-10 text-center">
+                        {isSelectable ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(u.id)}
+                            onChange={() => handleToggleSelectOne(u.id)}
+                            className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">
                           {u.firstName} {u.lastName}
@@ -473,6 +562,19 @@ export const AdminUsersPage: React.FC = () => {
         cancelLabel="Cancel"
         variant="warning"
         icon="warning"
+        isLoading={isProcessing}
+      />
+      {/* Bulk Delete Users Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteUsers}
+        title={`Permanently delete ${selectedIds.length} users?`}
+        description={`Are you sure you want to delete these ${selectedIds.length} selected user accounts? All associated progress and data will be permanently removed. This action cannot be undone.`}
+        confirmLabel={isProcessing ? 'Deleting...' : `Delete ${selectedIds.length} Users`}
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
         isLoading={isProcessing}
       />
     </div>

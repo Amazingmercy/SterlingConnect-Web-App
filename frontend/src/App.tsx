@@ -7,11 +7,11 @@ import { AssessmentProvider } from './context/AssessmentContext';
 import { OpportunityProvider } from './context/OpportunityContext';
 import { ApplicationProvider } from './context/ApplicationContext';
 import { AppLayout } from './layouts/AppLayout';
-import { LandingPage } from './features/landing/LandingPage';
+// import { LandingPage } from './features/landing/LandingPage';
 import { AboutPage } from './pages/AboutPage';
 import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
-import { RegisterPage } from './features/auth/RegisterPage';
+// import { RegisterPage } from './features/auth/RegisterPage';
 import { VerifyEmailPage } from './features/auth/VerifyEmailPage';
 import { SignInPage } from './features/auth/SignInPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
@@ -22,14 +22,12 @@ import { ScholarshipProfilePage } from './features/profile/ScholarshipProfilePag
 import { AssessmentGatePage } from './features/assessment/AssessmentGatePage';
 import { AssessmentQuestionnairePage } from './features/assessment/AssessmentQuestionnairePage';
 import { AssessmentResultsPage } from './features/assessment/AssessmentResultsPage';
-import { ActionPlanPage } from './features/assessment/ActionPlanPage';
 import { RecommendedLearningPage } from './features/recommendations';
 import { OpportunitiesCatalogPage } from './features/opportunities/OpportunitiesCatalogPage';
 import { OpportunityDetailPage } from './features/opportunities/OpportunityDetailPage';
 import { SavedOpportunitiesPage } from './features/opportunities/SavedOpportunitiesPage';
 import { ApplicationPipelinePage } from './features/applications/ApplicationPipelinePage';
 import { OutcomeFollowUpPage } from './features/applications/OutcomeFollowUpPage';
-import { NotificationsPage } from './features/notifications/NotificationsPage';
 import { UserDashboardPage } from './features/dashboard/UserDashboardPage';
 import { SettingsPage } from './features/dashboard/SettingsPage';
 import { AdminLayout } from './features/admin/AdminLayout';
@@ -49,7 +47,7 @@ import { AdminStaffAccessPage } from './features/admin/AdminStaffAccessPage';
 import { AdminSettingsPage } from './features/admin/AdminSettingsPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { TaxonomyProvider } from './context/TaxonomyContext';
-import { NotificationProvider } from './context/NotificationContext';
+import { SystemLinksProvider } from './context/SystemLinksContext';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { initGA, trackPageView } from './utils/analytics';
@@ -87,24 +85,24 @@ function AnalyticsTracker() {
 export default function App() {
   return (
     <ToastProvider>
-      <AuthProvider>
+      <SystemLinksProvider>
+        <AuthProvider>
         <TaxonomyProvider>
           <ProfileProvider>
             <AssessmentProvider>
               <OpportunityProvider>
                 <ApplicationProvider>
-                  <NotificationProvider>
                   <Router>
                     <AnalyticsTracker />
                     <Routes>
                     <Route element={<AppLayout />}>
-                      <Route path="/" element={<LandingPage />} />
+                      <Route path="/" element={<Navigate replace to="/sign-in" />} />
                       <Route path="/about" element={<AboutPage />} />
                       <Route path="/terms" element={<TermsPage />} />
                       <Route path="/privacy" element={<PrivacyPage />} />
 
                       {/* Feature 2: Auth & Onboarding Flow */}
-                      <Route path="/register" element={<RegisterPage />} />
+                      <Route path="/register" element={<Navigate replace to="/sign-in" />} />
                       <Route path="/verify-email" element={<VerifyEmailPage />} />
                       <Route path="/signin" element={<SignInPage />} />
                       <Route path="/sign-in" element={<SignInPage />} />
@@ -187,11 +185,7 @@ export default function App() {
                       />
                       <Route
                         path="/action-plan"
-                        element={
-                          <ProtectedRoute>
-                            <ActionPlanPage />
-                          </ProtectedRoute>
-                        }
+                        element={<Navigate replace to="/recommendations" />}
                       />
                       <Route
                         path="/recommendations"
@@ -259,11 +253,7 @@ export default function App() {
                       />
                       <Route
                         path="/notifications"
-                        element={
-                          <ProtectedRoute>
-                            <NotificationsPage />
-                          </ProtectedRoute>
-                        }
+                        element={<Navigate replace to="/dashboard" />}
                       />
                       <Route
                         path="/settings"
@@ -320,13 +310,13 @@ export default function App() {
             </Route>
           </Routes>
         </Router>
-        </NotificationProvider>
         </ApplicationProvider>
         </OpportunityProvider>
         </AssessmentProvider>
         </ProfileProvider>
         </TaxonomyProvider>
       </AuthProvider>
+      </SystemLinksProvider>
     </ToastProvider>
   );
 }

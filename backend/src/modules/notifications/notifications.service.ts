@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationType } from '@prisma/client';
+import { PushNotificationsService } from './push-notifications.service';
 
 export interface CreateNotificationDto {
   title: string;
@@ -11,7 +12,10 @@ export interface CreateNotificationDto {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pushService: PushNotificationsService,
+  ) {}
 
   /**
    * GET /api/notifications
@@ -132,10 +136,10 @@ export class NotificationsService {
   }
 
   /**
-   * Helper to create in-app notification
+   * Helper to create in-app notification & dispatch native Web Push notification
    */
   async createNotification(userId: string, data: CreateNotificationDto) {
-    return this.prisma.notification.create({
+    const notif = await this.prisma.notification.create({
       data: {
         userId,
         title: data.title,
@@ -144,6 +148,17 @@ export class NotificationsService {
         actionUrl: data.actionUrl,
       },
     });
+
+    // Send native push notification to browser/PWA if subscribed
+    await this.pushService
+      .sendNotification(userId, {
+        title: data.title,
+        body: data.message,
+        url: data.actionUrl || '/applications',
+      })
+      .catch(() => {});
+
+    return notif;
   }
 
   /**

@@ -66,6 +66,8 @@ export const AdminSettingsPage: React.FC = () => {
     setEditingSection(section);
     if (section === 'links' && data?.settings?.links) {
       setEditForm({ ...data.settings.links });
+    } else if (section === 'apiEndpoints' && data?.settings?.apiEndpoints) {
+      setEditForm({ ...data.settings.apiEndpoints });
     } else if (section === 'reminders' && data?.settings?.reminders) {
       setEditForm({ ...data.settings.reminders });
     } else if (section === 'security' && data?.settings?.security) {
@@ -86,6 +88,7 @@ export const AdminSettingsPage: React.FC = () => {
       };
       const res = await api.put('/admin/settings', payload);
       setData(res.data);
+      window.dispatchEvent(new CustomEvent('sterling_settings_updated'));
       toast('Configuration parameters updated successfully.');
       setEditingSection(null);
     } catch (err: any) {
@@ -102,11 +105,14 @@ export const AdminSettingsPage: React.FC = () => {
     try {
       const payload = {
         links: data.settings.links,
+        apiEndpoints: data.settings.apiEndpoints,
         reminders: data.settings.reminders,
         security: data.settings.security,
+        googleAnalytics: data.settings.googleAnalytics,
       };
       const res = await api.put('/admin/settings', payload);
       setData(res.data);
+      window.dispatchEvent(new CustomEvent('sterling_settings_updated'));
       toast('System settings saved successfully.');
     } catch (err: any) {
       toast('Failed to save system settings.', 'error');
@@ -190,26 +196,29 @@ export const AdminSettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Purpose & Security Policy Banner */}
+      {/* Purpose & Configuration Policy Banner */}
       <div className="p-4 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs space-y-1.5 leading-relaxed">
         <div className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-[#087b63] flex-shrink-0" />
+          <Settings className="w-4 h-4 text-[#087b63] flex-shrink-0" />
           <strong className="text-slate-900 font-bold text-xs">
-            Purpose &amp; Security Architecture
+            System Administration &amp; Dynamic Runtime Settings
           </strong>
         </div>
         <p className="text-[11px] text-slate-600">
-          This page manages platform runtime configurations across three distinct areas:
+          This page manages platform runtime configurations stored directly in the database with automatic fallback to server environment defaults:
         </p>
         <ul className="list-disc list-inside text-[11px] text-slate-600 space-y-0.5 pl-1">
           <li>
-            <strong>Operational Parameters:</strong> Approved deep links, automated reminder intervals, candidate reminder stages, and JWT security session timeouts are stored in the database and can be edited anytime using <em>Edit</em> or <em>Save settings</em>.
+            <strong>External API Endpoints &amp; Feeds:</strong> Course catalog, course prices, and opportunities sync URLs can be updated directly below. Changes take effect across recommendations and automated imports in real-time.
           </li>
           <li>
-            <strong>Environment Secrets (.env):</strong> Database credentials and Google Workspace SMTP app passwords are bound to server environment variables. In strict adherence to security specifications, passwords are permanently masked (<code className="font-mono text-[10px] bg-slate-100 px-1 py-0.5 rounded">••••••••••••</code>) and cannot be leaked or edited from browser forms.
+            <strong>Approved Platform Links:</strong> Outbound destinations for Sterling Academy, corporate portal, support email, and legal routes.
           </li>
           <li>
-            <strong>Diagnostics:</strong> Use <em>Test connection</em> to verify live end-to-end connectivity with the TiDB Cloud Serverless database and mail server.
+            <strong>Operational Schedules &amp; Reminders:</strong> Automated advance notice windows (days before deadline) and candidate application reminder stages.
+          </li>
+          <li>
+            <strong>Telemetry &amp; Security:</strong> Google Analytics 4 measurement streams and daily diagnostic assessment retake quotas.
           </li>
         </ul>
       </div>
@@ -383,50 +392,59 @@ export const AdminSettingsPage: React.FC = () => {
             </p>
           </div>
 
-          {/* Card 4: Google Workspace SMTP Integration (Server Environment) */}
+          {/* Card: External API Endpoints & Feeds */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Mail className="w-4 h-4 text-blue-600" /> Google Workspace SMTP Integration
+                <Globe className="w-4 h-4 text-[#087b63]" /> External API Endpoints &amp; Feeds
               </h3>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                Server Environment
-              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenEdit('apiEndpoints')}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded text-[11px] font-semibold transition cursor-pointer"
+              >
+                <Edit2 className="w-3 h-3 text-slate-500" /> Edit
+              </button>
             </div>
             <div className="space-y-2">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">SMTP Host</span>
-                <span className="font-mono text-slate-800 font-semibold">{data.settings.smtp?.host}</span>
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Course Catalog API</span>
+                <span
+                  className="font-mono text-[#087b63] font-semibold truncate max-w-[220px]"
+                  title={data.settings.apiEndpoints?.coursesApiUrl}
+                >
+                  {data.settings.apiEndpoints?.coursesApiUrl || 'Default Tutor LMS'}
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">SMTP Port</span>
-                <span className="font-mono text-slate-800">{data.settings.smtp?.port} (SSL)</span>
+              <div className="flex items-center justify-between py-1 border-b border-slate-100">
+                <span className="text-slate-500">Course Prices API</span>
+                <span
+                  className="font-mono text-slate-800 font-semibold truncate max-w-[220px]"
+                  title={data.settings.apiEndpoints?.coursePricesApiUrl || 'None'}
+                >
+                  {data.settings.apiEndpoints?.coursePricesApiUrl || '(Using course item price)'}
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Sender / From Email</span>
-                <span className="font-mono text-slate-800 font-semibold">{data.settings.smtp?.senderEmail}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Sender Display Name</span>
-                <span className="font-mono text-slate-800 font-semibold">{data.settings.smtp?.senderName || 'Sterling Connect'}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">App Password</span>
-                <span className="font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                  ••••••••••••••••
+              <div className="flex items-center justify-between py-1">
+                <span className="text-slate-500">Opportunities Sync API</span>
+                <span
+                  className="font-mono text-[#087b63] font-semibold truncate max-w-[220px]"
+                  title={data.settings.apiEndpoints?.opportunitiesApiUrl}
+                >
+                  {data.settings.apiEndpoints?.opportunitiesApiUrl || 'Default Tutor Opportunities'}
                 </span>
               </div>
             </div>
             <p className="text-[10px] text-slate-400 italic">
-              Secrets must not be shown in the interface. Managed securely via server .env.
+              Live endpoints for automated course recommendations and opportunity catalog synchronization.
             </p>
           </div>
 
           {/* Card: Google Analytics 4 (GA4) Integration */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3 md:col-span-2">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Globe className="w-4 h-4 text-emerald-600" /> Google Analytics 4 (GA4)
+                <Activity className="w-4 h-4 text-emerald-600" /> Google Analytics 4 (GA4)
               </h3>
               <button
                 type="button"
@@ -436,17 +454,21 @@ export const AdminSettingsPage: React.FC = () => {
                 <Edit2 className="w-3 h-3 text-slate-500" /> Edit
               </button>
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Measurement ID</span>
-                <span className="font-mono text-slate-800 font-bold">{data.settings.googleAnalytics?.measurementId || 'G-8V6ZJ2E9X1'}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-0.5">
+                <span className="text-slate-500 block text-[11px]">Measurement ID</span>
+                <span className="font-mono text-slate-800 font-bold block text-xs">
+                  {data.settings.googleAnalytics?.measurementId || 'G-8V6ZJ2E9X1'}
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-100">
-                <span className="text-slate-500">Stream Name</span>
-                <span className="text-slate-800 font-medium truncate max-w-[180px]">{data.settings.googleAnalytics?.streamName || 'SterlingConnect Production Web'}</span>
+              <div className="space-y-0.5">
+                <span className="text-slate-500 block text-[11px]">Stream Name</span>
+                <span className="text-slate-800 font-medium truncate block text-xs">
+                  {data.settings.googleAnalytics?.streamName || 'SterlingConnect Production Web'}
+                </span>
               </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500">Telemetry Status</span>
+              <div className="space-y-0.5">
+                <span className="text-slate-500 block text-[11px]">Telemetry Status</span>
                 <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[10px]">
                   <CheckCircle2 size={12} /> Active &amp; Dispatching
                 </span>
@@ -455,59 +477,6 @@ export const AdminSettingsPage: React.FC = () => {
             <p className="text-[10px] text-slate-400 italic">
               Production telemetry stream for funnel drop-offs and candidate event capture.
             </p>
-          </div>
-
-          {/* Card 5: Primary Database Integration (Server Environment) */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3 md:col-span-2">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                <Database className="w-4 h-4 text-emerald-600" /> Primary Database Integration (TiDB Serverless)
-              </h3>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                Server Environment
-              </span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <span className="text-slate-500 block">Provider</span>
-                <span className="font-mono text-slate-800 font-semibold block">{data.settings.database?.provider}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-slate-500 block">Host &amp; Port</span>
-                <span className="font-mono text-slate-800 font-semibold block">
-                  {data.settings.database?.host}:{data.settings.database?.port || 4000}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-slate-500 block">Database Name &amp; User</span>
-                <span className="font-mono text-slate-800 font-semibold block">
-                  {data.settings.database?.database} ({data.settings.database?.user})
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100">
-              <div className="flex items-center justify-between pb-1">
-                <span className="text-slate-500 font-medium">Connection URI (Masked)</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleCopyUri(
-                      data.settings.database?.connectionUri ||
-                        `mysql://${data.settings.database?.user}:••••••••••••@${data.settings.database?.host}:4000/${data.settings.database?.database}?sslaccept=strict`
-                    )
-                  }
-                  className="inline-flex items-center gap-1 text-[11px] text-[#087b63] hover:text-[#065f4c] font-bold cursor-pointer"
-                >
-                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedLink ? 'Copied' : 'Copy Connection URI'}</span>
-                </button>
-              </div>
-              <div className="font-mono text-[11px] text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-200 truncate">
-                {data.settings.database?.connectionUri ||
-                  `mysql://${data.settings.database?.user}:••••••••••••@${data.settings.database?.host}:4000/${data.settings.database?.database}?sslaccept=strict`}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -519,7 +488,16 @@ export const AdminSettingsPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
               <div>
                 <h3 className="text-base font-serif font-bold text-gray-900 capitalize">
-                  Edit {editingSection === 'links' ? 'Approved Platform Links' : editingSection === 'reminders' ? 'Deadline Reminders' : editingSection === 'googleAnalytics' ? 'Google Analytics 4' : 'Security Parameters'}
+                  Edit{' '}
+                  {editingSection === 'links'
+                    ? 'Approved Platform Links'
+                    : editingSection === 'apiEndpoints'
+                    ? 'External API Endpoints & Feeds'
+                    : editingSection === 'reminders'
+                    ? 'Deadline Reminders'
+                    : editingSection === 'googleAnalytics'
+                    ? 'Google Analytics 4'
+                    : 'Security Parameters'}
                 </h3>
                 <p className="text-xs text-gray-500">
                   Update runtime configuration parameters. Changes take effect across the platform immediately.
@@ -598,6 +576,60 @@ export const AdminSettingsPage: React.FC = () => {
                       onChange={(e) => setEditForm({ ...editForm, supportEmail: e.target.value })}
                       className="w-full text-xs p-2.5 border border-slate-300 rounded-lg"
                     />
+                  </div>
+                </>
+              )}
+
+              {editingSection === 'apiEndpoints' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Course Catalog API URL
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://sterlinglrs.com/wp-json/tutor/v1/courses"
+                      value={editForm.coursesApiUrl || ''}
+                      onChange={(e) => setEditForm({ ...editForm, coursesApiUrl: e.target.value })}
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      External endpoint providing recommended courses. Falls back to STERLING_COURSES_API_URL in .env if left blank.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Course Prices API URL (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://sterlinglrs.com/wp-json/..."
+                      value={editForm.coursePricesApiUrl || ''}
+                      onChange={(e) => setEditForm({ ...editForm, coursePricesApiUrl: e.target.value })}
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Optional pricing feed. If blank, prices are extracted directly from the course item feed.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Opportunities Sync API URL
+                    </label>
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://sterlinglrs.com/wp-json/tutor/v1/opportunities"
+                      value={editForm.opportunitiesApiUrl || ''}
+                      onChange={(e) => setEditForm({ ...editForm, opportunitiesApiUrl: e.target.value })}
+                      className="w-full text-xs p-2.5 border border-slate-300 rounded-lg font-mono"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      External endpoint used by automated opportunity population and "Sync from API".
+                    </p>
                   </div>
                 </>
               )}

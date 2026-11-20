@@ -120,10 +120,6 @@ export const SavedOpportunitiesPage: React.FC = () => {
                         </span>
                       )}
                     </div>
-
-                    <span className="text-[10px] font-mono font-bold text-[#627086] bg-slate-100 px-2 py-0.5 rounded">
-                      {opp.referenceCode}
-                    </span>
                   </div>
 
                   {/* Title & Organization */}

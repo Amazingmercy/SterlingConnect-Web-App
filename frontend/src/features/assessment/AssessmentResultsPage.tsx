@@ -77,7 +77,7 @@ export const AssessmentResultsPage: React.FC = () => {
     if (score < 60) {
       return { label: 'Area to develop', color: 'bg-amber-50 text-amber-800 border-amber-200' };
     }
-    return { label: 'Build on this', color: 'bg-[#e3f4ed] text-[#087b63] border-[#bddbd1]' };
+    return null;
   };
 
   return (
@@ -106,9 +106,9 @@ export const AssessmentResultsPage: React.FC = () => {
             <span>Retake assessment</span>
           </button>
 
-          <Link to="/action-plan">
+          <Link to="/recommendations">
             <Button variant="primary" rightIcon={<ArrowRight size={14} />}>
-              View my action plan
+              View recommendations
             </Button>
           </Link>
         </div>
@@ -176,14 +176,9 @@ export const AssessmentResultsPage: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-[#edf0f3] flex flex-wrap items-center gap-3">
-            <Link to="/action-plan" className="w-full sm:w-auto">
-              <Button variant="primary" size="md" className="w-full sm:w-auto font-bold justify-center shadow-xs" rightIcon={<ArrowRight size={14} />}>
-                View my action plan
-              </Button>
-            </Link>
             <Link to="/recommendations" className="w-full sm:w-auto">
-              <Button variant="secondary" size="md" className="w-full sm:w-auto font-bold justify-center">
-                Explore recommended learning
+              <Button variant="primary" size="md" className="w-full sm:w-auto font-bold justify-center shadow-xs" rightIcon={<ArrowRight size={14} />}>
+                View recommendations
               </Button>
             </Link>
             <Link to="/opportunities" className="w-full sm:w-auto">
@@ -218,9 +213,11 @@ export const AssessmentResultsPage: React.FC = () => {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-1">
-                    <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${badge.color}`}>
-                      {badge.label}
-                    </span>
+                    {badge && (
+                      <span className={`inline-block text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                    )}
                     <h4 className="text-[13px] font-bold text-[#102641] leading-tight">
                       {cat.categoryTitle}: {formattedCatScore}%
                     </h4>
@@ -258,9 +255,9 @@ export const AssessmentResultsPage: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0 w-full sm:w-auto">
-          <Link to="/action-plan" className="w-full sm:w-auto">
+          <Link to="/recommendations" className="w-full sm:w-auto">
             <Button variant="primary" size="md" className="w-full sm:w-auto font-bold justify-center shadow-xs" rightIcon={<ArrowRight size={14} />}>
-              View my action plan
+              View recommendations
             </Button>
           </Link>
           <Link to="/opportunities" className="w-full sm:w-auto">

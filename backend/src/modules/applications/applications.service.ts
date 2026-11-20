@@ -11,8 +11,9 @@ import {
   UpdateApplicationStatusDto,
   UpdateApplicationNotesDto,
 } from './dto/application.dto';
-import { ApplicationStatus, NotificationType } from '@prisma/client';
+import { ApplicationStatus } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PushNotificationsService } from '../notifications/push-notifications.service';
 
 @Injectable()
 export class ApplicationsService {
@@ -21,6 +22,7 @@ export class ApplicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly pushService: PushNotificationsService,
   ) {}
 
   /**
@@ -187,24 +189,6 @@ export class ApplicationsService {
         },
       });
 
-      // In-app notification for eligible application follow-up when tracking is started (Workbook U24 copy: "Any update on {opportunity_title}?")
-      if (targetStatus === ApplicationStatus.APPLIED || targetStatus === ApplicationStatus.PREPARING) {
-        await this.prisma.notification
-          .create({
-            data: {
-              userId,
-              title: 'Eligible application follow-up',
-              message: `Any update on ${opp.title}?`,
-              type: NotificationType.STATUS_UPDATE,
-              actionUrl: '/applications',
-              isRead: false,
-            },
-          })
-          .catch((err) => {
-            this.logger.warn(`Failed to create application follow-up notification: ${err.message}`);
-          });
-      }
-
       return created;
     } catch (err: any) {
       if (err.code === 'P2002') {
@@ -264,7 +248,7 @@ export class ApplicationsService {
       dto.status === ApplicationStatus.UNSUCCESSFUL ||
       dto.status === ApplicationStatus.WITHDRAWN;
 
-    return this.executeWithRetry(async () => {
+    const updated = await this.executeWithRetry(async () => {
       return this.prisma.application.update({
         where: { id: existing.id },
         data: {
@@ -302,6 +286,24 @@ export class ApplicationsService {
         },
       });
     });
+
+    // Dispatch native push notification on milestone transitions
+    if (
+      dto.status === ApplicationStatus.SHORTLISTED ||
+      dto.status === ApplicationStatus.INTERVIEW ||
+      dto.status === ApplicationStatus.OFFER_SUCCESSFUL ||
+      dto.status === ApplicationStatus.AWARDED
+    ) {
+      await this.pushService
+        .sendNotification(userId, {
+          title: '🎉 Application Progress',
+          body: `Milestone reached! Your application for "${updated.opportunity?.title || 'opportunity'}" is now marked as ${dto.status.replace(/_/g, ' ')}.`,
+          url: '/applications',
+        })
+        .catch(() => {});
+    }
+
+    return updated;
   }
 
   /**
@@ -410,21 +412,14 @@ export class ApplicationsService {
           );
         });
 
-      // 2. In-App Notification (Spec U24: "{opportunity_title} closes on {deadline_display}.")
-      await this.prisma.notification
-        .create({
-          data: {
-            userId: app.userId,
-            title: 'Saved deadline alert',
-            message: `${app.opportunity.title} closes on ${deadlineStr}.`,
-            type: NotificationType.DEADLINE_REMINDER,
-            actionUrl: `/opportunities/${app.opportunity.id}`,
-            isRead: false,
-          },
+      // 2. Native Push Notification
+      await this.pushService
+        .sendNotification(app.userId, {
+          title: '⏰ Application Deadline Reminder',
+          body: `${app.opportunity.title} closes on ${deadlineStr}. Submit your application before it closes!`,
+          url: `/opportunities/${app.opportunity.id}`,
         })
-        .catch((err) => {
-          this.logger.warn(`Failed to create deadline in-app notification: ${err.message}`);
-        });
+        .catch(() => {});
     }
 
     this.logger.log(`Deadline check completed. Processed ${applications.length} opportunities.`);
@@ -480,21 +475,14 @@ export class ApplicationsService {
             this.logger.error(`Failed to send EM005 follow-up to ${app.user.email}: ${err.message}`);
           });
 
-        // In-App Notification (Spec U24: "Any update on {opportunity_title}?")
-        await this.prisma.notification
-          .create({
-            data: {
-              userId: app.userId,
-              title: 'Eligible application follow-up',
-              message: `Any update on ${app.opportunity.title}?`,
-              type: NotificationType.STATUS_UPDATE,
-              actionUrl: `/applications`,
-              isRead: false,
-            },
+        // Native Push Notification follow-up
+        await this.pushService
+          .sendNotification(app.userId, {
+            title: '📋 Application Milestone Check-In',
+            body: `Any update on ${app.opportunity.title}? Have you been shortlisted or invited for an interview?`,
+            url: '/applications',
           })
-          .catch((err) => {
-            this.logger.warn(`Failed to create follow-up in-app notification: ${err.message}`);
-          });
+          .catch(() => {});
       }
     }
   }

@@ -49,7 +49,7 @@ export const TaxonomyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (Array.isArray(grouped.SECTOR) && grouped.SECTOR.length > 0) {
           setSectors(
             grouped.SECTOR.map((s: any) => ({
-              id: s.code,
+              id: s.code || s.id,
               label: s.name,
               aliases: s.aliases?.map((a: any) => a.alias) || [],
             }))
@@ -58,7 +58,7 @@ export const TaxonomyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (Array.isArray(grouped.FUNCTION) && grouped.FUNCTION.length > 0) {
           setJobFunctions(
             grouped.FUNCTION.map((f: any) => ({
-              id: f.code,
+              id: f.code || f.id,
               label: f.name,
               aliases: f.aliases?.map((a: any) => a.alias) || [],
             }))
@@ -89,7 +89,7 @@ export const TaxonomyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (Array.isArray(grouped.DEGREE_LEVEL) && grouped.DEGREE_LEVEL.length > 0) {
           setQualifications(
             grouped.DEGREE_LEVEL.map((q: any) => ({
-              key: q.code,
+              key: q.code || q.id,
               label: q.name,
             }))
           );

@@ -43,6 +43,7 @@ model User {
   
   // Pathway selection: strictly one active pathway at a time, switchable
   activePathway               Pathway     @default(EMPLOYMENT)
+  hasSelectedPathway          Boolean     @default(false)
   
   // Mandatory Assessment Gate (FR-03: Onboarding only until assessment is completed)
   hasCompletedAssessment      Boolean     @default(false)

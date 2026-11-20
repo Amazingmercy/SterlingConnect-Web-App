@@ -165,11 +165,6 @@ export const AdminAnalyticsPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-serif font-bold text-gray-900">Analytics & Intelligence</h2>
-            {isSuperAdmin && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                <Shield className="w-3 h-3 text-amber-600" /> Super Admin View
-              </span>
-            )}
           </div>
           <p className="text-xs text-gray-600 mt-0.5">
             Real-time candidate conversion funnels, Google Analytics 4 (GA4) traffic, and behavioral events.

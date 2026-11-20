@@ -42,6 +42,8 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
 
   // Delete draft version
   const [deleteVersionTarget, setDeleteVersionTarget] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isDeletingVersion, setIsDeletingVersion] = useState<boolean>(false);
 
   // Question item edit state
@@ -65,6 +67,7 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
 
   const fetchVersions = async () => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const res = await api.get('/admin/assessment-versions');
       setData(res.data);
@@ -142,6 +145,38 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
       fetchVersions();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to delete assessment version.', 'error');
+    } finally {
+      setIsDeletingVersion(false);
+    }
+  };
+
+  const deletableVersions = (data?.versions || []).filter((v: any) => v.status === 'DRAFT');
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === deletableVersions.length && deletableVersions.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(deletableVersions.map((v: any) => v.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteVersions = async () => {
+    if (selectedIds.length === 0) return;
+    setIsDeletingVersion(true);
+    try {
+      const res = await api.post('/admin/assessment-versions/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} draft assessment versions.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchVersions();
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete selected versions.', 'error');
     } finally {
       setIsDeletingVersion(false);
     }
@@ -279,6 +314,32 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
         </span>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'draft version' : 'draft versions'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Versions List */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -290,6 +351,15 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={deletableVersions.length > 0 && selectedIds.length === deletableVersions.length}
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all draft versions"
+                    />
+                  </th>
                   <th className="py-3 px-4">Version</th>
                   <th className="py-3 px-4">Title</th>
                   <th className="py-3 px-4">Status</th>
@@ -299,9 +369,28 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data?.versions?.map((ver: any) => (
-                  <tr key={ver.id} className="hover:bg-slate-50 transition">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
+                {data?.versions?.map((ver: any) => {
+                  const isDeletable = ver.status === 'DRAFT';
+                  return (
+                    <tr
+                      key={ver.id}
+                      className={`hover:bg-slate-50 transition ${
+                        selectedIds.includes(ver.id) ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-3 w-10 text-center">
+                        {isDeletable ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(ver.id)}
+                            onChange={() => handleToggleSelectOne(ver.id)}
+                            className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                       v{ver.versionNumber}
                     </td>
                     <td className="py-3 px-4 font-semibold text-slate-800">{ver.title}</td>
@@ -364,7 +453,8 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>
@@ -725,6 +815,19 @@ export const AdminAssessmentVersionsPage: React.FC = () => {
         title={`Delete draft version v${deleteVersionTarget?.versionNumber}?`}
         description="Are you sure you want to delete this draft assessment version? This action cannot be undone."
         confirmLabel="Delete Draft"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="warning"
+        isLoading={isDeletingVersion}
+      />
+      {/* Bulk Delete Draft Versions Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteVersions}
+        title={`Delete ${selectedIds.length} draft assessment versions?`}
+        description={`Are you sure you want to permanently delete these ${selectedIds.length} selected draft versions? This action cannot be undone.`}
+        confirmLabel={isDeletingVersion ? 'Deleting...' : `Delete ${selectedIds.length} Versions`}
         cancelLabel="Cancel"
         variant="danger"
         icon="warning"

@@ -218,7 +218,6 @@ export const OpportunityProvider: React.FC<{ children: React.ReactNode }> = ({ c
     if (user) {
       try {
         await api.post(`/opportunities/${id}/save`);
-        window.dispatchEvent(new CustomEvent('refresh-notifications'));
       } catch {
         // silent fallback
       }

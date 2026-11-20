@@ -66,9 +66,10 @@ export const AssessmentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // User-scoped hydration & synchronization
   useEffect(() => {
+    // ALWAYS reset state first on user change to prevent state leakage
+    clearAssessmentState();
+
     if (!user) {
-      // Reset state for unauthenticated visitor or after logout
-      clearAssessmentState();
       return;
     }
 

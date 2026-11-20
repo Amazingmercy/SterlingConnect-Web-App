@@ -8,12 +8,14 @@ import {
   Clock,
   Star,
   CheckCircle2,
-  Compass,
+  Sparkles,
+  PlayCircle,
+  Award,
+  GraduationCap,
+  Layers,
 } from 'lucide-react';
 import { useAssessment } from '../../context/AssessmentContext';
 import { useAuth } from '../../context/AuthContext';
-import { getRecommendedCoursesForPriorities } from '../assessment/scoringEngine';
-import { ACADEMY_COURSES } from '../assessment/data/courses';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { api } from '../../services/api';
@@ -24,7 +26,7 @@ export const RecommendedLearningPage: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
   const [filter, setFilter] = useState<'All' | 'Free' | 'Essentials' | 'Fundamentals' | 'Advanced'>('All');
   const [apiCourses, setApiCourses] = useState<RecommendedCourse[] | null>(null);
-  const [goalNotice, setGoalNotice] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // If user completed assessment, get tailored courses for the 3 priority areas; otherwise use default catalog
   const isUserCompleted = Boolean(user?.hasCompletedAssessment && result);
@@ -32,6 +34,7 @@ export const RecommendedLearningPage: React.FC = () => {
   // Fetch recommendations from Recommendation Engine API
   useEffect(() => {
     let isMounted = true;
+    setIsLoading(true);
     api
       .get('/recommendations')
       .then((res) => {
@@ -49,8 +52,9 @@ export const RecommendedLearningPage: React.FC = () => {
             isFree: Boolean(item.isFree),
             priceNGN: Number(item.priceNGN) || 0,
             duration: item.duration || '2-4 hours',
-            academyUrl: item.enrollmentUrl || 'https://learn.sterlinglrs.com',
+            academyUrl: item.enrollmentUrl || item.academyUrl || 'https://learn.sterlinglrs.com',
             description: item.notes || item.description || 'Targeted module designed to bridge diagnostic readiness gaps.',
+            thumbnailUrl: item.thumbnailUrl,
             format: 'Sterling Short',
             access: item.isFree ? 'Free' : 'Paid',
             estimatedTime: item.duration || '2 hours',
@@ -58,13 +62,15 @@ export const RecommendedLearningPage: React.FC = () => {
             recommendationReason: item.recommendationReason,
           }));
           setApiCourses(mapped);
-          if (res.data.goalNotice) {
-            setGoalNotice(res.data.goalNotice);
-          }
+        } else {
+          setApiCourses([]);
         }
       })
       .catch(() => {
-        // Fallback to client-side rule computation
+        if (isMounted) setApiCourses([]);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
       });
 
     return () => {
@@ -72,11 +78,8 @@ export const RecommendedLearningPage: React.FC = () => {
     };
   }, [user?.id, isUserCompleted]);
 
-  const defaultCourses: RecommendedCourse[] = isUserCompleted && result?.priorityCategories
-    ? getRecommendedCoursesForPriorities(result.priorityCategories)
-    : ACADEMY_COURSES;
-
-  const courses = apiCourses && apiCourses.length > 0 ? apiCourses : defaultCourses;
+  // Strictly use live courses returned from recommendations API - no mock cache fallback!
+  const courses: RecommendedCourse[] = apiCourses || [];
 
   const filteredCourses = courses
     .filter((c) => {
@@ -97,99 +100,134 @@ export const RecommendedLearningPage: React.FC = () => {
   const paidCourses = filteredCourses.filter((c) => !c.isFree);
 
   const renderCourseCard = (course: RecommendedCourse) => {
-    const isScholarship =
-      user?.pathway === 'Education & Scholarships' ||
-      user?.pathway === 'Education & Scholarship Opportunities';
-
-    const goalLabel = isScholarship ? 'Scholarship & Academic Preparation' : 'Employment & Career Readiness';
-    const reasonText =
-      course.recommendationReason ||
-      (isUserCompleted
-        ? `Recommended to help you strengthen ${course.categoryTitle}.`
-        : `Suggested for your goal: ${goalLabel}.`);
+    const isFree = Boolean(course.isFree);
+    const duration = course.duration || '2-4 hours';
+    const level = course.level || 'Essentials';
+    const hasThumbnail = Boolean(course.thumbnailUrl);
 
     return (
-      <Card
+      <div
         key={course.id}
-        hoverEffect
-        className="flex flex-col justify-between p-5 space-y-4 border border-[#e4eaf0] bg-white rounded-xl shadow-xs"
+        className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border border-[#e2e8f0] shadow-xs hover:shadow-xl hover:border-[#087b63]/50 hover:-translate-y-1 transition-all duration-300"
       >
-        <div className="space-y-3">
-          {/* Reason text & Access badge */}
-          <div className="flex items-start justify-between gap-2">
-            <span
-              className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                course.isFree
-                  ? 'bg-[#e3f4ed] text-[#087b63] border border-[#bddbd1]'
-                  : 'bg-slate-100 text-[#526078] border border-slate-200'
-              }`}
-            >
-              {course.isFree ? 'Free' : 'Paid course'}
-            </span>
+        <div>
+          {/* Card Visual Header / Media */}
+          <div className="relative w-full h-48 overflow-hidden bg-gradient-to-br from-[#0c2340] via-[#087b63] to-[#054334]">
+            {hasThumbnail ? (
+              <img
+                src={course.thumbnailUrl}
+                alt={course.title}
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : null}
 
-            {!course.isFree && (
-              <span className="text-[12px] font-extrabold text-[#102641]">
-                ₦{course.priceNGN?.toLocaleString() || '15,000'}
+            {/* Ambient Dark Gradient Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent pointer-events-none" />
+
+            {/* Decorative Brand Watermark */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-15 pointer-events-none">
+              <GraduationCap size={96} className="text-white" />
+            </div>
+
+            {/* Floating Top Badges */}
+            <div className="absolute top-3.5 inset-x-3.5 flex items-center justify-between gap-2 z-10">
+              {/* Access Tag */}
+              {isFree ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-emerald-500/95 text-white shadow-md backdrop-blur-md">
+                  <Sparkles size={12} className="animate-pulse" />
+                  <span>Free Course</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wider bg-slate-950/90 text-white border border-white/25 shadow-md backdrop-blur-md">
+                  <span>₦{course.priceNGN ? course.priceNGN.toLocaleString() : '15,000'}</span>
+                </span>
+              )}
+
+              {/* Level Badge */}
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-black/45 text-white/95 border border-white/20 backdrop-blur-md shadow-xs">
+                {level}
               </span>
+            </div>
+
+            {/* Floating Bottom Metadata over Media */}
+            <div className="absolute bottom-3 inset-x-3.5 z-10 flex items-center justify-between text-white/90 text-xs">
+              <div className="flex items-center gap-1.5 font-semibold text-[11px] truncate drop-shadow-md">
+                <Layers size={13} className="text-emerald-300 flex-shrink-0" />
+                <span className="truncate">{course.categoryTitle || 'Professional Development'}</span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] font-bold text-white/95 bg-black/40 px-2 py-0.5 rounded-md backdrop-blur-xs flex-shrink-0 drop-shadow-md">
+                <Clock size={12} />
+                <span>{duration}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card Body Content */}
+          <div className="p-5 space-y-3">
+            {/* Why recommended notice */}
+            {course.recommendationReason && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-200/80 text-[11px] font-semibold leading-tight">
+                <Sparkles size={12} className="text-amber-600 flex-shrink-0" />
+                <span className="truncate">{course.recommendationReason}</span>
+              </div>
             )}
-          </div>
 
-          {/* Reason Badge */}
-          <p className="text-[11px] font-semibold text-[#087b63] leading-snug">
-            {reasonText}
-          </p>
+            {/* Course Title */}
+            <h3 className="font-brand font-bold text-[15px] sm:text-[16px] text-[#102641] group-hover:text-[#087b63] transition-colors leading-snug line-clamp-2">
+              {course.title}
+            </h3>
 
-          {/* Category & Course Code */}
-          <div className="flex items-center justify-between text-[11px]">
-            <p className="font-bold text-[#102641] truncate">
-              {course.categoryTitle}
+            {/* Brief Explanation / Description */}
+            <p className="text-[12.5px] text-[#526078] leading-relaxed line-clamp-3">
+              {course.description}
             </p>
-            <span className="font-mono text-[10px] text-[#627086] font-semibold">
-              {course.courseCode}
-            </span>
-          </div>
 
-          {/* Course Title */}
-          <h3 className="font-brand font-bold text-sm text-[#102641] leading-snug min-h-[40px]">
-            {course.title}
-          </h3>
-
-          {/* Canonical Specification Details (Appendix B) */}
-          <div className="text-[11px] font-medium text-[#526078] bg-[#f8fafb] px-3 py-2 rounded-lg border border-[#e4eaf0] space-y-1">
-            <div>
-              <strong className="text-[#102641] font-semibold">Estimated learning time:</strong>{' '}
-              {course.estimatedTime || course.duration || '2-4 hours'}
-            </div>
-            <div className="text-[10px] text-[#627086]">
-              Level: {course.level} • Format: {course.format || 'Sterling Short'}
+            {/* Meta tags */}
+            <div className="flex items-center gap-3 pt-1 text-[11px] font-semibold text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <PlayCircle size={13} className="text-[#087b63]" />
+                <span>Self-Paced</span>
+              </span>
+              <span>•</span>
+              <span className="inline-flex items-center gap-1">
+                <Award size={13} className="text-[#087b63]" />
+                <span>Certificate</span>
+              </span>
             </div>
           </div>
-
-          {/* Description */}
-          <p className="text-[11px] text-[#627086] leading-relaxed line-clamp-3">
-            {course.description}
-          </p>
         </div>
 
-        {/* CTA Footer */}
-        <div className="pt-3 border-t border-[#edf0f3] flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-[#627086] text-[11px]">
-            <Clock size={13} />
-            <span>{course.duration || '2-4 hours'}</span>
+        {/* Card Footer & Action */}
+        <div className="px-5 py-4 border-t border-slate-100 bg-[#fbfcfd] flex items-center justify-between gap-3">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+              {isFree ? 'Tuition' : 'Academy Fee'}
+            </span>
+            <span className={`text-[14px] font-extrabold ${isFree ? 'text-[#087b63]' : 'text-[#102641]'}`}>
+              {isFree ? '100% Free' : `₦${course.priceNGN ? course.priceNGN.toLocaleString() : '15,000'}`}
+            </span>
           </div>
 
           <a
             href={course.academyUrl || 'https://learn.sterlinglrs.com'}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`View ${course.title} on Sterling Academy in a new tab`}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#087b63] text-white hover:bg-[#066350] font-bold text-xs shadow-xs transition"
+            aria-label={`Enroll in ${course.title} on Sterling Academy`}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs shadow-xs transition-all duration-200 group-hover:shadow-md ${
+              isFree
+                ? 'bg-[#087b63] text-white hover:bg-[#066350]'
+                : 'bg-[#102641] text-white hover:bg-[#0a1829]'
+            }`}
           >
-            <span>View on Sterling Academy</span>
-            <ExternalLink size={12} />
+            <span>{isFree ? 'Enroll Free' : 'View Course'}</span>
+            <ArrowRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
           </a>
         </div>
-      </Card>
+      </div>
     );
   };
 
@@ -211,11 +249,6 @@ export const RecommendedLearningPage: React.FC = () => {
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-          <Link to="/action-plan" className="w-full sm:w-auto">
-            <Button variant="secondary" size="sm" className="w-full justify-center">
-              View my action plan
-            </Button>
-          </Link>
           <Link to="/opportunities" className="w-full sm:w-auto">
             <Button variant="primary" size="sm" className="w-full justify-center" rightIcon={<ArrowRight size={14} />}>
               Explore opportunities
@@ -224,20 +257,7 @@ export const RecommendedLearningPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Goal Notice if diagnostic has not been taken yet */}
-      {goalNotice && !isUserCompleted && (
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900">
-          <div className="flex items-center gap-2">
-            <Compass size={16} className="text-amber-700 flex-shrink-0" />
-            <span>{goalNotice}</span>
-          </div>
-          <Link to="/assessment" className="w-full sm:w-auto">
-            <Button variant="primary" size="sm" className="w-full justify-center">
-              Start assessment
-            </Button>
-          </Link>
-        </div>
-      )}
+
 
       {/* Filter Chips */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -314,16 +334,11 @@ export const RecommendedLearningPage: React.FC = () => {
             We’ll show relevant learning here when it is available.
           </h3>
           <p className="text-xs text-[#627086] max-w-md mx-auto leading-relaxed">
-            We’ll show relevant learning here when it is available. You can work on your action plan in the meantime.
+            We’ll show relevant learning here when it is available. Explore curated opportunities in the meantime.
           </p>
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/action-plan">
-              <Button variant="primary" size="sm">
-                View my action plan
-              </Button>
-            </Link>
             <Link to="/opportunities">
-              <Button variant="secondary" size="sm">
+              <Button variant="primary" size="sm" rightIcon={<ArrowRight size={14} />}>
                 Explore opportunities
               </Button>
             </Link>
@@ -332,19 +347,19 @@ export const RecommendedLearningPage: React.FC = () => {
       )}
 
       {/* Academy Outbound Note (Spec U16: Before outbound navigation) */}
-      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center gap-2.5">
+      {/* <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center gap-2.5">
         <ExternalLink size={15} className="text-slate-400 flex-shrink-0" />
         <span>Learning takes place on Sterling Academy. You may need to sign in there separately.</span>
-      </div>
+      </div> */}
 
       {/* Special Rule Reminder */}
-      <div className="p-4 rounded-xl bg-[#f0f8f5] border border-[#bddbd1] flex items-start gap-3 text-xs text-[#05644f] leading-relaxed">
+      {/* <div className="p-4 rounded-xl bg-[#f0f8f5] border border-[#bddbd1] flex items-start gap-3 text-xs text-[#05644f] leading-relaxed">
         <CheckCircle2 size={18} className="text-[#087b63] flex-shrink-0 mt-0.5" />
         <span>
           <strong>Sterling Connect Policy: </strong>
           All scholarship readiness learning under <em>Scholarships &amp; Educational Advancement</em> is provided 100% free of charge. Paid professional courses in other categories retain published Academy pricing and are never required to become eligible for opportunity listings.
         </span>
-      </div>
+      </div> */}
     </div>
   );
 

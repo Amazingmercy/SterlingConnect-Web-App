@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Body,
   Param,
   Query,
   UseGuards,
@@ -83,6 +84,36 @@ export class OpportunitiesController {
   @UseGuards(JwtAuthGuard)
   async getSavedOpportunities(@CurrentUser('id') userId: string) {
     return this.opportunitiesService.getSavedOpportunities(userId);
+  }
+
+  /**
+   * Sync opportunities from external API
+   */
+  @Post('sync')
+  @UseGuards(JwtAuthGuard)
+  async syncOpportunities(@Body('url') customUrl?: string) {
+    return this.opportunitiesService.syncFromApi(customUrl);
+  }
+
+  /**
+   * Ingest opportunities directly via API
+   */
+  @Post('ingest')
+  async ingestOpportunities(@Body() body: any) {
+    const list = Array.isArray(body) ? body : (body.opportunities || [body]);
+    return this.opportunitiesService.ingestFromApi(list);
+  }
+
+  /**
+   * AI-generated personalized match explanation using candidate profile and matching rules result
+   */
+  @Get(':id/ai-match-explanation')
+  @UseGuards(JwtAuthGuard)
+  async getAiMatchExplanation(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.opportunitiesService.generateAiMatchExplanation(id, userId);
   }
 
   /**

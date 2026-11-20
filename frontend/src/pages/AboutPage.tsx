@@ -39,9 +39,9 @@ export const AboutPage: React.FC = () => {
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link to={isFullyVerified ? '/dashboard' : '/register'}>
+              <Link to={isFullyVerified ? '/dashboard' : '/sign-in'}>
                 <Button variant="primary" rightIcon={<ArrowRight size={14} />}>
-                  {isFullyVerified ? 'Continue to dashboard' : 'Get Started'}
+                  {isFullyVerified ? 'Continue to dashboard' : 'Sign in'}
                 </Button>
               </Link>
               <a
@@ -262,9 +262,9 @@ export const AboutPage: React.FC = () => {
             Create your candidate profile, benchmark your readiness score, and discover verified scholarships and roles that match your ambitions.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Link to={isFullyVerified ? '/dashboard' : '/register'}>
+            <Link to={isFullyVerified ? '/dashboard' : '/sign-in'}>
               <Button variant="mint" size="md">
-                {isFullyVerified ? 'Continue to dashboard' : 'Get Started'}
+                {isFullyVerified ? 'Continue to dashboard' : 'Sign in'}
               </Button>
             </Link>
             <Link to="/opportunities">

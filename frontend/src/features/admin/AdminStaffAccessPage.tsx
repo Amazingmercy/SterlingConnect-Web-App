@@ -46,10 +46,13 @@ export const AdminStaffAccessPage: React.FC = () => {
 
   // Revoke Access Modal state
   const [revokeTarget, setRevokeTarget] = useState<StaffMember | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkRevokeModalOpen, setIsBulkRevokeModalOpen] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
 
   const fetchStaff = async () => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const res = await api.get('/admin/staff');
       setData(res.data);
@@ -157,6 +160,45 @@ export const AdminStaffAccessPage: React.FC = () => {
     }
   };
 
+  const revokableStaff = (data?.staff || []).filter((s) => s.id !== currentUser?.id);
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === revokableStaff.length && revokableStaff.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(revokableStaff.map((s) => s.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkRevokeStaff = async () => {
+    if (selectedIds.length === 0) return;
+    setIsRevoking(true);
+    setFeedback(null);
+    try {
+      const res = await api.post('/admin/staff/bulk-revoke', { ids: selectedIds });
+      setFeedback({
+        type: 'success',
+        message: `Successfully revoked administrative access for ${res.data.revokedCount} staff members.`,
+      });
+      setSelectedIds([]);
+      setIsBulkRevokeModalOpen(false);
+      fetchStaff();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to revoke staff access.',
+      });
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -209,6 +251,32 @@ export const AdminStaffAccessPage: React.FC = () => {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'staff member' : 'staff members'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkRevokeModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <UserMinus className="w-3.5 h-3.5" />
+              <span>Revoke Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Staff List Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         {isLoading ? (
@@ -220,6 +288,15 @@ export const AdminStaffAccessPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={revokableStaff.length > 0 && selectedIds.length === revokableStaff.length}
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
                   <th className="py-3 px-4">Staff Member</th>
                   <th className="py-3 px-4">Role</th>
                   <th className="py-3 px-4">Status</th>
@@ -233,7 +310,24 @@ export const AdminStaffAccessPage: React.FC = () => {
                   const initial = (s.firstName?.[0] || s.email?.[0] || 'A').toUpperCase();
 
                   return (
-                    <tr key={s.id} className="hover:bg-slate-50/70 transition">
+                    <tr
+                      key={s.id}
+                      className={`hover:bg-slate-50/70 transition ${
+                        selectedIds.includes(s.id) ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <td className="py-3.5 px-3 w-10 text-center">
+                        {!isCurrent ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(s.id)}
+                            onChange={() => handleToggleSelectOne(s.id)}
+                            className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                          />
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-[#102641] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
@@ -439,6 +533,19 @@ export const AdminStaffAccessPage: React.FC = () => {
         title="Revoke access"
         description="Revoking access removes this person’s administration permissions."
         confirmLabel="Revoke access"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
+        isLoading={isRevoking}
+      />
+      {/* Bulk Revoke Access Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkRevokeModalOpen}
+        onClose={() => setIsBulkRevokeModalOpen(false)}
+        onConfirm={executeBulkRevokeStaff}
+        title={`Revoke access for ${selectedIds.length} staff members?`}
+        description={`Are you sure you want to revoke administrative permissions for these ${selectedIds.length} selected staff members? They will be demoted to standard user accounts.`}
+        confirmLabel={isRevoking ? 'Revoking...' : `Revoke ${selectedIds.length} Members`}
         cancelLabel="Cancel"
         variant="danger"
         icon="trash"

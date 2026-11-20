@@ -36,6 +36,8 @@ export const AdminEmailLogsPage: React.FC = () => {
 
   // Deletion state
   const [logToDelete, setLogToDelete] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
   const [isClearModalOpen, setIsClearModalOpen] = useState<boolean>(false);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
@@ -48,6 +50,35 @@ export const AdminEmailLogsPage: React.FC = () => {
       await fetchEmailLogs(pagination.page);
     } catch (err) {
       console.error('Failed to delete email log', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === logs.length && logs.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(logs.map((l) => l.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteEmailLogs = async () => {
+    if (selectedIds.length === 0) return;
+    setIsDeleting(true);
+    try {
+      await api.post('/admin/email-logs/bulk-delete', { ids: selectedIds });
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      await fetchEmailLogs(pagination.page);
+    } catch (err) {
+      console.error('Failed to bulk delete email logs', err);
     } finally {
       setIsDeleting(false);
     }
@@ -69,6 +100,7 @@ export const AdminEmailLogsPage: React.FC = () => {
   const fetchEmailLogs = async (page = 1) => {
     setIsLoading(true);
     setError(null);
+    setSelectedIds([]);
     try {
       const params = new URLSearchParams();
       params.append('page', String(page));
@@ -264,6 +296,32 @@ export const AdminEmailLogsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'log' : 'logs'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Logs Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -283,6 +341,15 @@ export const AdminEmailLogsPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={logs.length > 0 && selectedIds.length === logs.length}
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Trigger Type</th>
                   <th className="py-3 px-4">Recipient</th>
@@ -292,7 +359,20 @@ export const AdminEmailLogsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50 transition">
+                  <tr
+                    key={log.id}
+                    className={`hover:bg-slate-50 transition ${
+                      selectedIds.includes(log.id) ? 'bg-amber-50/40' : ''
+                    }`}
+                  >
+                    <td className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(log.id)}
+                        onChange={() => handleToggleSelectOne(log.id)}
+                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
@@ -369,6 +449,20 @@ export const AdminEmailLogsPage: React.FC = () => {
         title="Delete email delivery record?"
         description={`Are you sure you want to delete the email log record for "${logToDelete?.recipientEmail}" (${logToDelete?.triggerType})?`}
         confirmLabel="Delete Record"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
+        isLoading={isDeleting}
+      />
+
+      {/* Bulk Delete Email Logs Modal */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteEmailLogs}
+        title={`Delete ${selectedIds.length} email logs?`}
+        description={`Are you sure you want to permanently delete these ${selectedIds.length} selected email transmission records? This action cannot be undone.`}
+        confirmLabel={isDeleting ? 'Deleting...' : `Delete ${selectedIds.length} Records`}
         cancelLabel="Cancel"
         variant="danger"
         icon="trash"

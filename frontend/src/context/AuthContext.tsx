@@ -47,6 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nationality: apiUser.commonProfile?.nationalities?.[0] || 'Nigerian',
           isEmailVerified: apiUser.isEmailVerified,
           hasCompletedAssessment: apiUser.hasCompletedAssessment,
+          hasSelectedPathway: Boolean(apiUser.hasSelectedPathway),
           pathway:
             apiUser.activePathway === 'SCHOLARSHIP'
               ? 'Education & Scholarships'
@@ -132,12 +133,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const login = async (data: LoginFormData): Promise<{ success: boolean; error?: string; user?: User }> => {
-    if (!data.email || !data.password) {
-      return { success: false, error: 'Enter your email and password to continue.' };
+    const username = (data.username || data.email || '').trim();
+    if (!username || !data.password) {
+      return { success: false, error: 'Enter your username and password to continue.' };
     }
 
     try {
       const res = await api.post('/auth/login', {
+        username,
         email: data.email,
         password: data.password,
         rememberMe: data.rememberMe,
@@ -155,6 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           nationality: 'Nigerian',
           isEmailVerified: apiUser.isEmailVerified,
           hasCompletedAssessment: apiUser.hasCompletedAssessment,
+          hasSelectedPathway: Boolean(apiUser.hasSelectedPathway),
           pathway:
             apiUser.activePathway === 'SCHOLARSHIP'
               ? 'Education & Scholarships'
@@ -255,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     if (user) {
-      const updated = { ...user, pathway, primaryGoal };
+      const updated: User = { ...user, pathway, primaryGoal, hasSelectedPathway: true };
       setUser(updated);
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
     }

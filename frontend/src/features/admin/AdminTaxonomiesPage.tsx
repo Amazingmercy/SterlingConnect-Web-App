@@ -6,9 +6,11 @@ import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { useToast } from '../../context/ToastContext';
+import { useTaxonomies } from '../../context/TaxonomyContext';
 
 export const AdminTaxonomiesPage: React.FC = () => {
   const { toast } = useToast();
+  const { refreshTaxonomies } = useTaxonomies();
   const [data, setData] = useState<any>(null);
   const [selectedType, setSelectedType] = useState<string>('SECTOR');
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -33,11 +35,14 @@ export const AdminTaxonomiesPage: React.FC = () => {
 
   // Modal State for delete option (CRUD Delete)
   const [deleteOptionTarget, setDeleteOptionTarget] = useState<{ id: string; name: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTaxonomies = async () => {
     setIsLoading(true);
     setFeedback(null);
+    setSelectedIds([]);
     try {
       const res = await api.get(`/admin/taxonomies?type=${selectedType}`);
       setData(res.data);
@@ -66,6 +71,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       setNewCode('');
       setNewName('');
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to add option.', 'error');
     } finally {
@@ -89,6 +95,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       toast(`Label updated to "${editLabelValue.trim()}".`);
       setEditTarget(null);
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to update taxonomy label.', 'error');
     } finally {
@@ -108,6 +115,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       setAliasTarget(null);
       setAliasValue('');
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to add alias.', 'error');
     } finally {
@@ -120,6 +128,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       await api.delete(`/admin/taxonomies/aliases/${aliasId}`);
       toast(`Alias "${aliasName}" removed.`);
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to remove alias.', 'error');
     }
@@ -137,6 +146,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       toast(deactivateTarget.isActive ? 'Taxonomy option deactivated.' : 'Taxonomy option reactivated.');
       setDeactivateTarget(null);
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       toast(err.response?.data?.message || 'Failed to update taxonomy option.', 'error');
     } finally {
@@ -152,6 +162,7 @@ export const AdminTaxonomiesPage: React.FC = () => {
       toast(`Taxonomy option "${deleteOptionTarget.name}" deleted.`);
       setDeleteOptionTarget(null);
       fetchTaxonomies();
+      refreshTaxonomies();
     } catch (err: any) {
       const msg =
         err.response?.data?.message ||
@@ -159,6 +170,37 @@ export const AdminTaxonomiesPage: React.FC = () => {
       setFeedback(msg);
       toast(msg, 'error');
       setDeleteOptionTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === (data?.items?.length || 0) && (data?.items?.length || 0) > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds((data?.items || []).map((t: any) => t.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteTaxonomies = async () => {
+    if (selectedIds.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const res = await api.post('/admin/taxonomies/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} taxonomy options.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchTaxonomies();
+      refreshTaxonomies();
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete selected taxonomies.', 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -228,6 +270,32 @@ export const AdminTaxonomiesPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'option' : 'options'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Taxonomy Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -239,6 +307,18 @@ export const AdminTaxonomiesPage: React.FC = () => {
             <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
               <tr>
+                <th className="py-3 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={
+                      (data?.items?.length || 0) > 0 &&
+                      selectedIds.length === data.items.length
+                    }
+                    onChange={handleToggleSelectAll}
+                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                    title="Select all"
+                  />
+                </th>
                 <th className="py-3 px-4">Code Identifier</th>
                 <th className="py-3 px-4">Canonical Label</th>
                 <th className="py-3 px-4">Aliases &amp; Mappings</th>
@@ -249,13 +329,26 @@ export const AdminTaxonomiesPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {data?.items?.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-500">
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
                     No options found for {taxonomyTypes.find((t) => t.key === selectedType)?.label || selectedType}. Click "+ Add option" to create one.
                   </td>
                 </tr>
               ) : (
                 data?.items?.map((item: any) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition">
+                  <tr
+                    key={item.id}
+                    className={`hover:bg-slate-50 transition ${
+                      selectedIds.includes(item.id) ? 'bg-amber-50/40' : ''
+                    }`}
+                  >
+                    <td className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item.id)}
+                        onChange={() => handleToggleSelectOne(item.id)}
+                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      />
+                    </td>
                     <td className="py-3 px-4 font-mono font-bold text-slate-900">{item.code}</td>
                     <td className="py-3 px-4 font-semibold text-slate-800">{item.name}</td>
                     <td className="py-3 px-4">
@@ -460,6 +553,19 @@ export const AdminTaxonomiesPage: React.FC = () => {
         title={`Delete taxonomy option "${deleteOptionTarget?.name}"?`}
         description="This option is referenced by existing records. Deactivate it rather than deleting it."
         confirmLabel="Delete Option"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="warning"
+        isLoading={isDeleting}
+      />
+      {/* Bulk Delete Taxonomies Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteTaxonomies}
+        title={`Delete ${selectedIds.length} taxonomy options?`}
+        description={`Are you sure you want to permanently delete these ${selectedIds.length} selected taxonomy options? Options referenced by existing records cannot be deleted and will be skipped.`}
+        confirmLabel={isDeleting ? 'Deleting...' : `Delete ${selectedIds.length} Options`}
         cancelLabel="Cancel"
         variant="danger"
         icon="warning"

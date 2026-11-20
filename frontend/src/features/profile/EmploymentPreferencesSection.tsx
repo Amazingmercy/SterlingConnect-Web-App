@@ -681,7 +681,8 @@ export const EmploymentPreferencesSection: React.FC<EmploymentPreferencesSection
               onChange={(e) => addLocation(e.target.value)}
               className="flex-1 h-9 px-3 rounded-lg border border-[#e4eaf0] bg-white text-xs font-medium text-[#102641] focus:outline-none"
             >
-              <option value="">+ Add target country</option>
+              <option value="">+ Add target location</option>
+              <option value="Remote (Global)">Remote (Global)</option>
               {ALL_COUNTRY_NAMES.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -705,14 +706,20 @@ export const EmploymentPreferencesSection: React.FC<EmploymentPreferencesSection
 
         <div className="space-y-2 pt-1">
           {locations.map((countryName) => {
-            const currentAuth = (workAuth as any)[countryName] || (countryName === common.countryOfResidence ? 'Yes' : 'Not sure');
+            const currentAuth =
+              (workAuth as any)[countryName] ||
+              (countryName === common.countryOfResidence || countryName === 'Remote (Global)'
+                ? 'Yes'
+                : 'Not sure');
             return (
               <div
                 key={countryName}
                 className="p-3 rounded-xl border border-slate-100 bg-[#f8fafb] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
               >
                 <div className="font-bold text-[#102641]">
-                  Are you authorised to work in {countryName}?
+                  {countryName === 'Remote (Global)'
+                    ? 'Are you authorised to work for Remote (Global) roles?'
+                    : `Are you authorised to work in ${countryName}?`}
                 </div>
 
                 <div className="flex items-center gap-1.5">

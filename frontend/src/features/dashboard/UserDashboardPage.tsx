@@ -190,11 +190,14 @@ export const UserDashboardPage: React.FC = () => {
     return evaluatedOpportunities.slice(0, 3);
   }, [evaluatedOpportunities]);
 
+  // Role checks
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+
   // 4-Step Flexible Onboarding Tracker
   const isAccountDone = Boolean(user?.isEmailVerified);
-  const isPathwayDone = Boolean(user?.pathway);
+  const isPathwayDone = Boolean(user?.hasSelectedPathway);
   const isProfileDone =
-    profileScore >= 50 ||
+    profileScore >= 50 &&
     Boolean(profile.common.countryOfResidence && profile.common.currentStatus);
   const isAssessmentDone = Boolean(user?.hasCompletedAssessment && assessmentResult);
 
@@ -285,8 +288,8 @@ export const UserDashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Flexible Onboarding Progress Card (hidden when 100% complete) */}
-      {completedStepsCount < 4 && (
+      {/* Flexible Onboarding Progress Card (hidden when 100% complete OR if user is an ADMIN) */}
+      {!isAdmin && completedStepsCount < 4 && (
         <Card className="p-6 bg-white border border-[#e4eaf0] rounded-2xl shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
           <div className="space-y-1">
@@ -531,8 +534,8 @@ export const UserDashboardPage: React.FC = () => {
                 <h3 className="font-brand font-bold text-sm text-[#102641] uppercase tracking-wider">
                   Your next steps
                 </h3>
-                <Link to="/action-plan" className="text-[11px] font-bold text-[#087b63] hover:underline flex items-center gap-1">
-                  <span>View all actions</span>
+                <Link to="/recommendations" className="text-[11px] font-bold text-[#087b63] hover:underline flex items-center gap-1">
+                  <span>View recommendations</span>
                   <ArrowRight size={12} />
                 </Link>
               </div>
@@ -772,9 +775,6 @@ export const UserDashboardPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#e3f4ed] text-[#087b63]">
                       {opp.matchLabel.replace('_', ' ')}
-                    </span>
-                    <span className="text-[11px] text-[#627086] font-mono">
-                      {opp.referenceCode}
                     </span>
                   </div>
 

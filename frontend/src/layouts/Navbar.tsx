@@ -5,7 +5,6 @@ import {
   X,
   ArrowRight,
   ExternalLink,
-  Bell,
   Compass,
   BriefcaseBusiness,
   Bookmark,
@@ -26,15 +25,15 @@ import { Button } from '../components/ui/Button';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal';
 import { BrandLogo } from '../components/ui/BrandLogo';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationContext';
+import { useSystemLinks } from '../context/SystemLinksContext';
 
 export const Navbar: React.FC = () => {
+  const { links } = useSystemLinks();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
-  const { unreadCount } = useNotifications();
 
   // Close mobile menu whenever location changes
   useEffect(() => {
@@ -60,9 +59,8 @@ export const Navbar: React.FC = () => {
 
   const publicNavLinks = [
     { label: 'Opportunities', path: '/opportunities', isExternal: false },
-    { label: 'Readiness Assessment', path: '/assessment', isExternal: false },
-    { label: 'Sterling Academy', path: 'https://learn.sterlinglrs.com', isExternal: true },
-    { label: 'About Sterling', path: 'https://sterlinglrs.com/about', isExternal: true },
+    { label: 'Sterling Academy', path: 'https://learn.sterlinglrs.com', isExternal: false },
+    { label: 'About Sterling', path: 'https://sterlinglrs.com/about', isExternal: false },
   ];
 
   const candidateNavLinks = [
@@ -70,11 +68,9 @@ export const Navbar: React.FC = () => {
     { label: 'Opportunities', path: '/opportunities', icon: BriefcaseBusiness },
     { label: 'Saved Opportunities', path: '/saved', icon: Bookmark },
     { label: 'Readiness Assessment', path: '/assessment', icon: ClipboardCheck },
-    { label: 'My Action Plan', path: '/action-plan', icon: ClipboardList },
     { label: 'My Applications', path: '/applications', icon: FileText },
     { label: 'Recommendations', path: '/recommendations', icon: Lightbulb },
     { label: 'Candidate Profile', path: '/profile', icon: UserRound },
-    { label: 'Notifications', path: '/notifications', icon: Bell, badge: unreadCount },
     { label: 'Settings & Preferences', path: '/settings', icon: SlidersHorizontal },
   ];
 
@@ -139,21 +135,6 @@ export const Navbar: React.FC = () => {
             {/* Case 1: Signed In & Verified Candidate */}
             {isFullyVerified && user ? (
               <>
-                {/* Notifications Bell - Always Visible & Tap-Friendly (44x44 target on touch) */}
-                <Link
-                  to="/notifications"
-                  className="relative w-10 h-10 rounded-xl text-[#526078] hover:text-[#102641] hover:bg-slate-50 border border-[#e4eaf0] transition-colors flex items-center justify-center cursor-pointer"
-                  title="Notifications Centre"
-                  aria-label={`Notifications, ${unreadCount} unread`}
-                >
-                  <Bell size={18} />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#087b63] text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                  )}
-                </Link>
-
                 {/* Desktop Profile Pill (Hidden on mobile, accessible via drawer) */}
                 <Link
                   to="/profile"
@@ -214,20 +195,6 @@ export const Navbar: React.FC = () => {
             ) : (
               /* Case 3: Public Visitor */
               <>
-                <div className="hidden md:flex items-center gap-3">
-                  <Link
-                    to="/sign-in"
-                    className="text-xs font-bold text-[#42516a] hover:text-[#087b63] transition-colors px-2 py-1"
-                  >
-                    Sign in
-                  </Link>
-                  <Link to="/register">
-                    <Button variant="primary" size="md" rightIcon={<ArrowRight size={14} />}>
-                      Get started
-                    </Button>
-                  </Link>
-                </div>
-
                 {/* Mobile Hamburger Toggle for Public Visitors */}
                 <button
                   type="button"
@@ -352,11 +319,6 @@ export const Navbar: React.FC = () => {
                             <Icon size={17} className={active ? 'text-[#087b63]' : 'text-[#627086]'} />
                             <span>{item.label}</span>
                           </div>
-                          {item.badge !== undefined && item.badge > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-[#087b63] text-white font-extrabold">
-                              {item.badge}
-                            </span>
-                          )}
                         </Link>
                       );
                     })}
@@ -404,14 +366,40 @@ export const Navbar: React.FC = () => {
                 <Link to="/about" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#087b63]">
                   About
                 </Link>
-                <Link to="/terms" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#087b63]">
-                  Terms of Use
-                </Link>
-                <Link to="/privacy" onClick={() => setMobileMenuOpen(false)} className="hover:text-[#087b63]">
-                  Privacy Notice
-                </Link>
+                {links.termsUrl?.startsWith('http') ? (
+                  <a
+                    href={links.termsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="hover:text-[#087b63] inline-flex items-center gap-0.5"
+                  >
+                    <span>Terms</span>
+                    <ExternalLink size={9} />
+                  </a>
+                ) : (
+                  <Link to={links.termsUrl || '/terms'} onClick={() => setMobileMenuOpen(false)} className="hover:text-[#087b63]">
+                    Terms
+                  </Link>
+                )}
+                {links.privacyNoticeUrl?.startsWith('http') ? (
+                  <a
+                    href={links.privacyNoticeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="hover:text-[#087b63] inline-flex items-center gap-0.5"
+                  >
+                    <span>Privacy</span>
+                    <ExternalLink size={9} />
+                  </a>
+                ) : (
+                  <Link to={links.privacyNoticeUrl || '/privacy'} onClick={() => setMobileMenuOpen(false)} className="hover:text-[#087b63]">
+                    Privacy
+                  </Link>
+                )}
                 <a
-                  href="https://learn.sterlinglrs.com"
+                  href={links.academyUrl || 'https://learn.sterlinglrs.com'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-[#087b63] inline-flex items-center gap-1"
@@ -423,8 +411,8 @@ export const Navbar: React.FC = () => {
             </div>
 
             {/* Drawer Footer Actions */}
-            <div className="p-4 border-t border-[#edf0f3] bg-slate-50">
-              {isFullyVerified ? (
+            {isFullyVerified && (
+              <div className="p-4 border-t border-[#edf0f3] bg-slate-50">
                 <button
                   type="button"
                   onClick={() => {
@@ -436,21 +424,8 @@ export const Navbar: React.FC = () => {
                   <LogOut size={15} />
                   <span>Sign out of Connect</span>
                 </button>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  <Link to="/register" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="primary" className="w-full justify-center" size="md">
-                      Get started
-                    </Button>
-                  </Link>
-                  <Link to="/sign-in" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="secondary" className="w-full justify-center" size="md">
-                      Sign in
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}

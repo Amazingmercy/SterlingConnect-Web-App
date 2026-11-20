@@ -470,15 +470,15 @@ export const OpportunitiesCatalogPage: React.FC<OpportunitiesCatalogPageProps> =
         <div className="p-4 sm:p-5 rounded-xl border border-[#bddbd1] bg-[#e3f4ed]/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-0.5">
             <h4 className="text-xs font-bold text-[#05644f]">
-              Create a profile to see why opportunities may be relevant to you.
+              Sign in to see why opportunities may be relevant to you.
             </h4>
             <p className="text-[11px] text-[#526078]">
               Unlock transparent rules-based match scoring, personalized filters, and progress tracking.
             </p>
           </div>
-          <Link to="/register">
+          <Link to="/sign-in">
             <Button variant="primary" size="sm" rightIcon={<ArrowRight size={13} />}>
-              Create my profile
+              Sign in
             </Button>
           </Link>
         </div>

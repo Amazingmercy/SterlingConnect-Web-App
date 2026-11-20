@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useProfile } from '../../context/ProfileContext';
+import { useTaxonomies } from '../../context/TaxonomyContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { ALL_COUNTRY_NAMES } from './data/isoCountries';
-import { QUALIFICATIONS } from './data/careerTaxonomy';
+import { QUALIFICATIONS as FALLBACK_QUALIFICATIONS } from './data/careerTaxonomy';
 import { ProfileCompletionCard } from './ProfileCompletionCard';
 import type { UserUploadedDocument } from '../../types/profile';
 
@@ -27,7 +28,9 @@ export const ProfileBuilderPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { saveProfile, isSaving, profile, updateCommon, addDocument, removeDocument } = useProfile();
+  const { qualifications: dynamicQualifications, studyFields: dynamicStudyFields } = useTaxonomies();
   const { common, documents } = profile;
+  const qualificationsList = dynamicQualifications.length > 0 ? dynamicQualifications : FALLBACK_QUALIFICATIONS;
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -371,17 +374,38 @@ export const ProfileBuilderPage: React.FC = () => {
               )}
             </div>
 
-            {/* Highest completed qualification (Dropdown with exact labels) */}
+            {/* Current status */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#102641] block">
+                Current status
+              </label>
+              <select
+                value={common.currentStatus || ''}
+                onChange={(e) => updateCommon({ currentStatus: e.target.value })}
+                className="w-full h-10 px-3 rounded-lg border border-[#e4eaf0] bg-white text-xs font-semibold text-[#102641] focus:ring-2 focus:ring-[#90cfc0] focus:outline-none"
+              >
+                <option value="">Select your current status</option>
+                <option value="Final year undergraduate">Final year undergraduate</option>
+                <option value="Graduate / Job seeker">Graduate / Job seeker</option>
+                <option value="Employed professional">Employed professional</option>
+                <option value="Postgraduate student">Postgraduate student</option>
+              </select>
+              <span className="text-[11px] text-[#627086] block">
+                Your current educational or career stage.
+              </span>
+            </div>
+
+            {/* Highest completed qualification (Dynamic admin taxonomy) */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-[#102641] block">
                 Highest completed qualification
               </label>
               <select
-                value={common.highestQualification || 'Bachelor’s degree'}
+                value={common.highestQualification || (qualificationsList[0]?.label || 'Bachelor’s degree')}
                 onChange={(e) => updateCommon({ highestQualification: e.target.value })}
                 className="w-full h-10 px-3 rounded-lg border border-[#e4eaf0] bg-white text-xs font-semibold text-[#102641] focus:ring-2 focus:ring-[#90cfc0] focus:outline-none"
               >
-                {QUALIFICATIONS.map((q) => (
+                {qualificationsList.map((q) => (
                   <option key={q.key} value={q.label}>
                     {q.label}
                   </option>
@@ -389,6 +413,28 @@ export const ProfileBuilderPage: React.FC = () => {
               </select>
               <span className="text-[11px] text-[#627086] block">
                 Choose a qualification you have already completed.
+              </span>
+            </div>
+
+            {/* Field / Discipline of study (Dynamic admin taxonomy) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[#102641] block">
+                Field of study / Academic discipline
+              </label>
+              <select
+                value={common.fieldOfStudy || ''}
+                onChange={(e) => updateCommon({ fieldOfStudy: e.target.value })}
+                className="w-full h-10 px-3 rounded-lg border border-[#e4eaf0] bg-white text-xs font-semibold text-[#102641] focus:ring-2 focus:ring-[#90cfc0] focus:outline-none"
+              >
+                <option value="">Select your field of study</option>
+                {dynamicStudyFields.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-[#627086] block">
+                Connected to controlled academic study fields.
               </span>
             </div>
 

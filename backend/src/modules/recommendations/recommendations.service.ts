@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RecommendationQueryDto } from './dto/recommendation-query.dto';
 import { CourseLevel, Pathway, AssessmentAttemptStatus } from '@prisma/client';
+import { SterlingCoursesService, NormalizedAcademyCourse } from './sterling-courses.service';
 
 export type ReadinessBandType = 'EMERGING' | 'FOUNDATIONAL' | 'DEVELOPING' | 'PROFICIENT';
 
@@ -9,7 +10,10 @@ export type ReadinessBandType = 'EMERGING' | 'FOUNDATIONAL' | 'DEVELOPING' | 'PR
 export class RecommendationsService {
   private readonly logger = new Logger(RecommendationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sterlingCoursesService: SterlingCoursesService,
+  ) {}
 
   /**
    * Helper to determine readiness band from score
@@ -81,9 +85,12 @@ export class RecommendationsService {
       orderBy: { createdAt: 'asc' },
     });
 
+    if (activeRules.length === 0) {
+      return [];
+    }
+
     // Score/rank matching rules: exact category band match or ALL gets highest priority
     const prioritizedRules: typeof activeRules = [];
-    const secondaryRules: typeof activeRules = [];
 
     for (const rule of activeRules) {
       const catSpecificBand = categoryInfoMap.get(rule.categoryId)?.readinessBand;
@@ -98,13 +105,14 @@ export class RecommendationsService {
 
       if (isExactMatch) {
         prioritizedRules.push(rule);
-      } else {
-        secondaryRules.push(rule);
       }
     }
 
-    // Rules matching active admin definitions in order
-    const effectiveRules = [...prioritizedRules, ...secondaryRules];
+    // Rules matching active admin definitions strictly for candidate's band
+    const effectiveRules = prioritizedRules;
+    if (effectiveRules.length === 0) {
+      return [];
+    }
     const ruleCourseCodes = effectiveRules.map((r) => r.courseCode);
 
     // Track which categories mapped to each courseCode via admin rules
@@ -118,56 +126,22 @@ export class RecommendationsService {
     }
 
     // 2. Query matching courses prioritized by admin rule mapping
-    let ruleCourses: any[] = [];
-    if (ruleCourseCodes.length > 0) {
-      const fetchedRuleCourses = await this.prisma.academyCourse.findMany({
-        where: {
-          courseCode: { in: ruleCourseCodes },
-          isPublished: true,
-        },
-        include: {
-          category: {
-            select: { id: true, name: true, description: true },
-          },
-        },
-      });
+    const allAvailableCourses = await this.sterlingCoursesService.getCourses();
 
-      // Maintain order specified by matching admin rules
+    let ruleCourses: NormalizedAcademyCourse[] = [];
+    if (ruleCourseCodes.length > 0) {
       for (const code of ruleCourseCodes) {
-        const found = fetchedRuleCourses.find((c) => c.courseCode === code);
+        const found = allAvailableCourses.find(
+          (c) => c.courseCode === code || c.id === code,
+        );
         if (found && !ruleCourses.some((rc) => rc.id === found.id)) {
           ruleCourses.push(found);
         }
       }
     }
 
-    // 3. Query general category courses for any priority categories without a specific admin rule
-    const ruleCourseIds = ruleCourses.map((rc) => rc.id);
-    const generalCourses = await this.prisma.academyCourse.findMany({
-      where: {
-        categoryId: { in: topPriorityCategoryIds },
-        isPublished: true,
-        ...(ruleCourseIds.length > 0 ? { id: { notIn: ruleCourseIds } } : {}),
-      },
-      include: {
-        category: {
-          select: { id: true, name: true, description: true },
-        },
-      },
-      orderBy: [{ categoryId: 'asc' }, { level: 'asc' }],
-    });
-
-    // Populate category names for general courses
-    for (const gc of generalCourses) {
-      if (!courseToCategoriesMap.has(gc.courseCode)) {
-        courseToCategoriesMap.set(gc.courseCode, new Set());
-      }
-      const catName = categoryInfoMap.get(gc.categoryId)?.categoryName || gc.category?.name || gc.categoryId;
-      courseToCategoriesMap.get(gc.courseCode)!.add(catName);
-    }
-
-    // Merge rule-mapped courses first, followed by dimension-mapped courses
-    const allCandidates = [...ruleCourses, ...generalCourses];
+    // Strictly prioritize rule-mapped courses only when admin rules exist!
+    const allCandidates = ruleCourses;
 
     // Deduplicate courses by id while aggregating matched category reasons per U16 spec:
     // "Gap recommendation; aggregate reasons on dedup"
@@ -180,7 +154,7 @@ export class RecommendationsService {
       }
       seen.add(c.id);
 
-      const categoryNamesSet = courseToCategoriesMap.get(c.courseCode) || new Set([c.category?.name || 'this area']);
+      const categoryNamesSet = courseToCategoriesMap.get(c.courseCode) || new Set([c.categoryTitle || 'this area']);
       const categoryNames = Array.from(categoryNamesSet);
 
       let formattedDimensionLabel: string;
@@ -382,16 +356,40 @@ export class RecommendationsService {
       },
       orderBy: { createdAt: 'asc' },
     });
+
+    // If no admin rules are configured, strictly do not recommend fabricated courses
+    if (matchingGoalRules.length === 0) {
+      return {
+        hasAssessment: false,
+        overallScore: null,
+        overallBand: null,
+        priorityCategories: [],
+        goalNotice: null,
+        recommendations: [],
+        total: 0,
+      };
+    }
+
     const ruleCourseCodes = matchingGoalRules.map((r) => r.courseCode);
 
-    const courses = await this.prisma.academyCourse.findMany({
-      where,
-      include: {
-        category: {
-          select: { id: true, name: true, description: true },
-        },
-      },
-      orderBy: [{ isFree: 'desc' }, { level: 'asc' }],
+    const allCourses = await this.sterlingCoursesService.getCourses();
+
+    let courses = allCourses.filter((c) => {
+      if (query?.categoryId && c.categoryId !== query.categoryId) return false;
+      if (!query?.categoryId && goalCategoryIds.length > 0 && !goalCategoryIds.includes(c.categoryId))
+        return false;
+      if (query?.level && c.level.toLowerCase() !== query.level.toLowerCase()) return false;
+      if (query?.isFree !== undefined && c.isFree !== query.isFree) return false;
+      if (query?.search) {
+        const s = query.search.toLowerCase();
+        if (
+          !c.title.toLowerCase().includes(s) &&
+          !c.courseCode.toLowerCase().includes(s) &&
+          !c.categoryTitle.toLowerCase().includes(s)
+        )
+          return false;
+      }
+      return true;
     });
 
     const isScholarship =
@@ -399,39 +397,49 @@ export class RecommendationsService {
       userPathway === 'Education & Scholarship Opportunities' ||
       userPathway === 'Education & Scholarships';
 
-    const goalLabel = isScholarship ? 'Scholarship & Academic Preparation' : 'Employment & Career Readiness';
-
-    // Prioritize rule courses first, then general
-    const ruleMappedCourses: any[] = [];
-    const nonRuleCourses: any[] = [];
+    // Only include courses that strictly match active admin recommendation rules
+    const ruleMappedCourses: NormalizedAcademyCourse[] = [];
     for (const c of courses) {
-      if (ruleCourseCodes.includes(c.courseCode)) {
+      if (ruleCourseCodes.includes(c.courseCode) || ruleCourseCodes.includes(c.id)) {
         ruleMappedCourses.push(c);
-      } else {
-        nonRuleCourses.push(c);
       }
     }
 
-    const combinedCourses = [...ruleMappedCourses, ...nonRuleCourses];
+    if (ruleMappedCourses.length === 0) {
+      return {
+        hasAssessment: false,
+        overallScore: null,
+        overallBand: null,
+        priorityCategories: [],
+        goalNotice: null,
+        recommendations: [],
+        total: 0,
+      };
+    }
 
-    const mappedWithReasons = combinedCourses
+    const mappedWithReasons = ruleMappedCourses
       .filter((c) => {
         if (isScholarship && c.categoryId === 'CAT-02' && !c.isFree) {
           return false;
         }
         return true;
       })
-      .map((c) => ({
-        ...c,
-        recommendationReason: `Suggested for your goal: ${goalLabel}.`,
-      }));
+      .map((c) => {
+        const matchingRule = matchingGoalRules.find(
+          (r) => r.courseCode === c.courseCode || r.courseCode === c.id,
+        );
+        return {
+          ...c,
+          recommendationReason: matchingRule?.ruleName || `Recommended for ${c.categoryTitle || 'your development'}`,
+        };
+      });
 
     return {
       hasAssessment: false,
       overallScore: null,
       overallBand: null,
       priorityCategories: [],
-      goalNotice: `Suggested courses for your active goal (${goalLabel}). Complete the readiness assessment to see preparation actions based on your answers.`,
+      goalNotice: null,
       recommendations: mappedWithReasons,
       total: mappedWithReasons.length,
     };
@@ -442,51 +450,42 @@ export class RecommendationsService {
    * Full course catalog exploration
    */
   async getAllCourses(query?: RecommendationQueryDto) {
-    const where: any = {
-      isPublished: true,
-    };
+    const allCourses = await this.sterlingCoursesService.getCourses();
 
-    if (query?.categoryId) {
-      where.categoryId = query.categoryId;
-    }
-
-    if (query?.level) {
-      where.level = query.level.toUpperCase() as CourseLevel;
-    }
-
-    if (query?.isFree !== undefined) {
-      where.isFree = query.isFree;
-    }
-
-    if (query?.search) {
-      where.OR = [
-        { title: { contains: query.search } },
-        { courseCode: { contains: query.search } },
-      ];
-    }
-
-    const courses = await this.prisma.academyCourse.findMany({
-      where,
-      include: {
-        category: {
-          select: { id: true, name: true, description: true },
-        },
-      },
-      orderBy: [{ isFree: 'desc' }, { categoryId: 'asc' }, { level: 'asc' }],
+    const filtered = allCourses.filter((c) => {
+      if (query?.categoryId && c.categoryId !== query.categoryId) return false;
+      if (query?.level && c.level.toLowerCase() !== query.level.toLowerCase()) return false;
+      if (query?.isFree !== undefined && c.isFree !== query.isFree) return false;
+      if (query?.search) {
+        const s = query.search.toLowerCase();
+        if (
+          !c.title.toLowerCase().includes(s) &&
+          !c.courseCode.toLowerCase().includes(s) &&
+          !c.categoryTitle.toLowerCase().includes(s)
+        )
+          return false;
+      }
+      return true;
     });
 
     return {
-      total: courses.length,
-      courses,
+      total: filtered.length,
+      courses: filtered,
     };
   }
 
   /**
-   * Diagnostic dimension categories
+   * Diagnostic dimension categories (Assessment Categories CAT-01 to CAT-10)
    */
   async getCategories() {
-    return this.prisma.academyCategory.findMany({
-      orderBy: { id: 'asc' },
+    const cats = await this.prisma.academyCategory.findMany({
+      orderBy: { displayOrder: 'asc' },
     });
+    return cats.map((c) => ({
+      id: c.id,
+      name: c.name,
+      slug: c.id.toLowerCase(),
+      description: c.description || undefined,
+    }));
   }
 }

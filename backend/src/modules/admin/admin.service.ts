@@ -18,6 +18,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { ConfigService } from '@nestjs/config';
+import { SterlingCoursesService } from '../recommendations/sterling-courses.service';
+import { SterlingOpportunitiesSyncService } from '../opportunities/sterling-opportunities-sync.service';
 import {
   CreateOpportunityDto,
   UpdateOpportunityDto,
@@ -32,7 +34,13 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly config: ConfigService,
+    private readonly sterlingCoursesService: SterlingCoursesService,
+    private readonly sterlingOpportunitiesSyncService: SterlingOpportunitiesSyncService,
   ) {}
+
+  async syncOpportunitiesFromApi(customUrl?: string) {
+    return this.sterlingOpportunitiesSyncService.syncFromApi(customUrl);
+  }
 
   // ==========================================
   // A02: PLATFORM OVERVIEW & KPIS
@@ -389,6 +397,23 @@ export class AdminService {
     return { success: true, message: `User account ${targetUser.email} permanently removed.` };
   }
 
+  async bulkDeleteUsers(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No user IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteUser(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`User ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   // ==========================================
   // A04, A05, A06: OPPORTUNITIES CRUD
   // ==========================================
@@ -689,6 +714,23 @@ export class AdminService {
     return { success: true };
   }
 
+  async bulkDeleteOpportunities(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No opportunity IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteOpportunity(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Opportunity ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   // ==========================================
   // A07: BULK IMPORTER
   // ==========================================
@@ -871,6 +913,208 @@ export class AdminService {
     }
 
     return { valid: true, errors: [], parsed };
+  }
+
+  /**
+   * Generates sample opportunity import templates in CSV or Excel XLSX format
+   */
+  async generateImportTemplate(
+    type: OpportunityType,
+    format: 'csv' | 'xlsx',
+  ): Promise<{ buffer: Buffer; filename: string; mimeType: string }> {
+    const isEmployment = type === OpportunityType.EMPLOYMENT;
+
+    const employmentColumns = [
+      { header: 'opportunityType', key: 'opportunityType', width: 18 },
+      { header: 'title', key: 'title', width: 36 },
+      { header: 'organization', key: 'organization', width: 28 },
+      { header: 'country', key: 'country', width: 18 },
+      { header: 'location', key: 'location', width: 18 },
+      { header: 'deadline', key: 'deadline', width: 15 },
+      { header: 'applicationUrl', key: 'applicationUrl', width: 35 },
+      { header: 'sourceUrl', key: 'sourceUrl', width: 35 },
+      { header: 'overview', key: 'overview', width: 45 },
+      { header: 'requirements', key: 'requirements', width: 45 },
+      { header: 'workArrangement', key: 'workArrangement', width: 18 },
+      { header: 'subType', key: 'subType', width: 16 },
+      { header: 'sector', key: 'sector', width: 24 },
+      { header: 'function', key: 'function', width: 24 },
+      { header: 'experienceLevel', key: 'experienceLevel', width: 18 },
+      { header: 'minimumEducation', key: 'minimumEducation', width: 18 },
+      { header: 'skills', key: 'skills', width: 35 },
+      { header: 'compensationRange', key: 'compensationRange', width: 24 },
+    ];
+
+    const employmentSampleRows = [
+      {
+        opportunityType: 'EMPLOYMENT',
+        title: 'Senior Distributed Database Engineer',
+        organization: 'Sterling Global Tech',
+        country: 'United Kingdom',
+        location: 'London',
+        deadline: '2027-04-30',
+        applicationUrl: 'https://sterling.example.com/apply',
+        sourceUrl: 'https://sterling.example.com/verify',
+        overview: 'Build high throughput cloud database clusters',
+        requirements: '5+ years backend systems and MySQL experience',
+        workArrangement: 'HYBRID',
+        subType: 'Full-time',
+        sector: 'Technology & Software',
+        function: 'Software Engineering',
+        experienceLevel: 'Senior',
+        minimumEducation: 'Bachelor',
+        skills: 'Go, MySQL, Distributed Systems, Redis',
+        compensationRange: '£85000 - £100000',
+      },
+      {
+        opportunityType: 'EMPLOYMENT',
+        title: 'Commercial Banking Associate',
+        organization: 'Sterling Financial Services',
+        country: 'Nigeria',
+        location: 'Lagos',
+        deadline: '2027-03-15',
+        applicationUrl: 'https://bank.example.com/careers',
+        sourceUrl: 'https://bank.example.com/announcement',
+        overview: 'Manage corporate client relationships and loan portfolios',
+        requirements: '2 years corporate banking and financial modeling',
+        workArrangement: 'ONSITE',
+        subType: 'Full-time',
+        sector: 'Financial Services',
+        function: 'Commercial Banking',
+        experienceLevel: 'Mid',
+        minimumEducation: 'Bachelor',
+        skills: 'Financial Modeling, Risk Analysis, Negotiation',
+        compensationRange: '₦12000000 - ₦15000000',
+      },
+    ];
+
+    const scholarshipColumns = [
+      { header: 'opportunityType', key: 'opportunityType', width: 18 },
+      { header: 'title', key: 'title', width: 38 },
+      { header: 'organization', key: 'organization', width: 28 },
+      { header: 'country', key: 'country', width: 18 },
+      { header: 'location', key: 'location', width: 18 },
+      { header: 'deadline', key: 'deadline', width: 15 },
+      { header: 'applicationUrl', key: 'applicationUrl', width: 35 },
+      { header: 'sourceUrl', key: 'sourceUrl', width: 35 },
+      { header: 'overview', key: 'overview', width: 45 },
+      { header: 'requirements', key: 'requirements', width: 45 },
+      { header: 'fundingLevel', key: 'fundingLevel', width: 18 },
+      { header: 'studyLevels', key: 'studyLevels', width: 20 },
+      { header: 'eligibleNationalities', key: 'eligibleNationalities', width: 24 },
+      { header: 'eligibleFields', key: 'eligibleFields', width: 35 },
+      { header: 'academicRequirement', key: 'academicRequirement', width: 30 },
+      { header: 'experienceRequirement', key: 'experienceRequirement', width: 28 },
+      { header: 'languageRequirement', key: 'languageRequirement', width: 22 },
+      { header: 'programStartYear', key: 'programStartYear', width: 18 },
+    ];
+
+    const scholarshipSampleRows = [
+      {
+        opportunityType: 'SCHOLARSHIP',
+        title: 'Sterling International Academic Fellowship',
+        organization: 'Sterling Trust',
+        country: 'Global',
+        location: 'Oxford',
+        deadline: '2027-05-15',
+        applicationUrl: 'https://trust.example.org/apply',
+        sourceUrl: 'https://trust.example.org/details',
+        overview: 'Fully funded postgraduate award for emerging researchers across global universities',
+        requirements: 'Demonstrated leadership and academic distinction',
+        fundingLevel: 'FULLY_FUNDED',
+        studyLevels: "Master's, PhD",
+        eligibleNationalities: 'All Nationalities',
+        eligibleFields: 'All Fields, STEM, Social Sciences',
+        academicRequirement: 'First Class Honours or 2:1 equivalent',
+        experienceRequirement: '2 years professional experience',
+        languageRequirement: 'IELTS 7.0 or equivalent',
+        programStartYear: '2027',
+      },
+      {
+        opportunityType: 'SCHOLARSHIP',
+        title: 'Global Leadership Graduate Award',
+        organization: 'Commonwealth Academic Board',
+        country: 'United Kingdom',
+        location: 'London',
+        deadline: '2027-06-30',
+        applicationUrl: 'https://cw.example.org/apply',
+        sourceUrl: 'https://cw.example.org/awards',
+        overview: 'Tuition fee waiver and living stipend for Commonwealth scholars',
+        requirements: 'Outstanding scholastic record and civic contribution',
+        fundingLevel: 'PARTIAL_TUITION',
+        studyLevels: "Master's",
+        eligibleNationalities: 'Commonwealth Countries',
+        eligibleFields: 'Public Policy, Economics, Climate Science',
+        academicRequirement: '3.5+ GPA or equivalent',
+        experienceRequirement: 'None required',
+        languageRequirement: 'IELTS 6.5',
+        programStartYear: '2027',
+      },
+    ];
+
+    const columns = isEmployment ? employmentColumns : scholarshipColumns;
+    const sampleRows = isEmployment ? employmentSampleRows : scholarshipSampleRows;
+
+    if (format === 'xlsx') {
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'Sterling Connect';
+      const worksheet = workbook.addWorksheet(
+        isEmployment ? 'Employment Opportunities' : 'Scholarship Opportunities',
+      );
+
+      worksheet.columns = columns.map((col) => ({
+        header: col.header,
+        key: col.key,
+        width: col.width,
+      }));
+
+      // Style header row
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: isEmployment ? 'FF102641' : 'FF087B63' },
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 26;
+
+      sampleRows.forEach((r) => {
+        const row = worksheet.addRow(r);
+        row.alignment = { vertical: 'middle' };
+      });
+
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+      return {
+        buffer,
+        filename: isEmployment
+          ? 'sterling_employment_opportunities_template.xlsx'
+          : 'sterling_scholarship_opportunities_template.xlsx',
+        mimeType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
+    } else {
+      const headerLine = columns.map((c) => c.header).join(',');
+      const rowLines = sampleRows.map((r: any) =>
+        columns
+          .map((c) => {
+            const val = String(r[c.key] ?? '');
+            if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+              return `"${val.replace(/"/g, '""')}"`;
+            }
+            return val;
+          })
+          .join(','),
+      );
+      const csvString = [headerLine, ...rowLines].join('\n');
+      return {
+        buffer: Buffer.from(csvString, 'utf-8'),
+        filename: isEmployment
+          ? 'sterling_employment_opportunities_template.csv'
+          : 'sterling_scholarship_opportunities_template.csv',
+        mimeType: 'text/csv; charset=utf-8',
+      };
+    }
   }
 
   async previewBulkImport(buffer: Buffer, filename: string, expectedType?: OpportunityType) {
@@ -1176,6 +1420,23 @@ export class AdminService {
     return { success: true, message: `Assessment version v${version.versionNumber} deleted.` };
   }
 
+  async bulkDeleteAssessmentVersions(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No assessment version IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteAssessmentVersion(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Version ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   async updateAssessmentQuestion(
     questionId: string,
     data: { statement?: string; construct?: string; isActive?: boolean },
@@ -1319,17 +1580,26 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const courses = await this.prisma.academyCourse.findMany({
-      select: { courseCode: true, title: true, categoryId: true, isFree: true, priceNGN: true },
-    });
-    const categories = await this.prisma.academyCategory.findMany({
-      select: { id: true, name: true },
-    });
+    const [courses, diagnosticCategories] = await Promise.all([
+      this.sterlingCoursesService.getCourses(),
+      this.prisma.academyCategory.findMany({
+        orderBy: { displayOrder: 'asc' },
+      }),
+    ]);
 
     return {
       rules,
-      canonicalProducts: courses,
-      diagnosticDimensions: categories,
+      canonicalProducts: courses.map((c) => ({
+        courseCode: c.courseCode,
+        title: c.title,
+        categoryId: c.categoryId,
+        isFree: c.isFree,
+        priceNGN: c.priceNGN,
+      })),
+      diagnosticDimensions: diagnosticCategories.map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+      })),
       instruction: 'Map dimensions and goals to canonical Academy products.',
     };
   }
@@ -1339,12 +1609,22 @@ export class AdminService {
     adminId: string,
     ipAddress?: string,
   ) {
-    const [cat, course] = await Promise.all([
-      this.prisma.academyCategory.findUnique({ where: { id: dto.categoryId } }),
-      this.prisma.academyCourse.findUnique({ where: { courseCode: dto.courseCode } }),
+    const [courses, diagnosticCategories] = await Promise.all([
+      this.sterlingCoursesService.getCourses(),
+      this.prisma.academyCategory.findMany({
+        orderBy: { displayOrder: 'asc' },
+      }),
     ]);
 
-    if (!cat || !course) {
+    const courseExists =
+      courses.some((c) => c.courseCode === dto.courseCode || c.id === dto.courseCode) ||
+      (await this.prisma.academyCourse.findUnique({ where: { courseCode: dto.courseCode } }));
+
+    const catExists =
+      diagnosticCategories.some((c) => c.id === dto.categoryId || c.name === dto.categoryId) ||
+      (await this.prisma.academyCategory.findUnique({ where: { id: dto.categoryId } }));
+
+    if (!catExists || !courseExists) {
       throw new BadRequestException(
         'This rule references a missing product or dimension. Correct it before activation.',
       );
@@ -1380,11 +1660,22 @@ export class AdminService {
 
     const newActive = !rule.isActive;
     if (newActive) {
-      const [cat, course] = await Promise.all([
-        this.prisma.academyCategory.findUnique({ where: { id: rule.categoryId } }),
-        this.prisma.academyCourse.findUnique({ where: { courseCode: rule.courseCode } }),
+      const [courses, diagnosticCategories] = await Promise.all([
+        this.sterlingCoursesService.getCourses(),
+        this.prisma.academyCategory.findMany({
+          orderBy: { displayOrder: 'asc' },
+        }),
       ]);
-      if (!cat || !course) {
+
+      const courseExists =
+        courses.some((c) => c.courseCode === rule.courseCode || c.id === rule.courseCode) ||
+        (await this.prisma.academyCourse.findUnique({ where: { courseCode: rule.courseCode } }));
+
+      const catExists =
+        diagnosticCategories.some((c) => c.id === rule.categoryId || c.name === rule.categoryId) ||
+        (await this.prisma.academyCategory.findUnique({ where: { id: rule.categoryId } }));
+
+      if (!catExists || !courseExists) {
         throw new BadRequestException(
           'This rule references a missing product or dimension. Correct it before activation.',
         );
@@ -1421,12 +1712,22 @@ export class AdminService {
     const targetCat = dto.categoryId || rule.categoryId;
     const targetCourse = dto.courseCode || rule.courseCode;
 
-    const [cat, course] = await Promise.all([
-      this.prisma.academyCategory.findUnique({ where: { id: targetCat } }),
-      this.prisma.academyCourse.findUnique({ where: { courseCode: targetCourse } }),
+    const [courses, diagnosticCategories] = await Promise.all([
+      this.sterlingCoursesService.getCourses(),
+      this.prisma.academyCategory.findMany({
+        orderBy: { displayOrder: 'asc' },
+      }),
     ]);
 
-    if (!cat || !course) {
+    const courseExists =
+      courses.some((c) => c.courseCode === targetCourse || c.id === targetCourse) ||
+      (await this.prisma.academyCourse.findUnique({ where: { courseCode: targetCourse } }));
+
+    const catExists =
+      diagnosticCategories.some((c) => c.id === targetCat || c.name === targetCat) ||
+      (await this.prisma.academyCategory.findUnique({ where: { id: targetCat } }));
+
+    if (!catExists || !courseExists) {
       throw new BadRequestException(
         'This rule references a missing product or dimension. Correct it before activation.',
       );
@@ -1474,6 +1775,23 @@ export class AdminService {
     });
 
     return { success: true, message: `Recommendation rule "${rule.ruleName}" deleted.` };
+  }
+
+  async bulkDeleteRecommendationRules(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No rule IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteRecommendationRule(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Rule ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
   }
 
   // ==========================================
@@ -1655,6 +1973,23 @@ export class AdminService {
     return { success: true, message: `Taxonomy option "${tax.name}" deleted.` };
   }
 
+  async bulkDeleteTaxonomies(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No taxonomy IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteTaxonomyOption(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Taxonomy ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   async deleteTaxonomyAlias(aliasId: string, adminId: string, ipAddress?: string) {
     const alias = await this.prisma.taxonomyAlias.findUnique({ where: { id: aliasId } });
     if (!alias) throw new NotFoundException('Taxonomy alias not found.');
@@ -1776,6 +2111,23 @@ export class AdminService {
     return { success: true, message: 'Application record removed.' };
   }
 
+  async bulkDeleteApplications(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No application IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteApplication(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Application ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   // ==========================================
   // A12: ANALYTICS & FUNNEL
   // ==========================================
@@ -1836,42 +2188,6 @@ export class AdminService {
       eventRuleNotice: 'An opportunity click is not a submitted application. A learning click is not an enrolment.',
       googleAnalytics: {
         config: googleAnalyticsConfig,
-        webTraffic: {
-          activeVisitorsNow: Math.max(2, Math.floor(totalUsers * 0.08) + 1),
-          totalPageViews30d: totalPageViewsEstimate,
-          uniqueVisitors30d: uniqueVisitorsEstimate,
-          averageSessionDuration: '3m 42s',
-          bounceRate: '28.4%',
-          engagementRate: '71.6%',
-          acquisitionChannels: [
-            { channel: 'Direct Traffic', percentage: 38, count: Math.round(uniqueVisitorsEstimate * 0.38) },
-            { channel: 'Organic Search', percentage: 31, count: Math.round(uniqueVisitorsEstimate * 0.31) },
-            { channel: 'University & Partner Links', percentage: 19, count: Math.round(uniqueVisitorsEstimate * 0.19) },
-            { channel: 'Social & Networks', percentage: 12, count: Math.round(uniqueVisitorsEstimate * 0.12) },
-          ],
-          deviceBreakdown: [
-            { device: 'Desktop / Laptop', percentage: 62 },
-            { device: 'Mobile Smartphone', percentage: 34 },
-            { device: 'Tablet', percentage: 4 },
-          ],
-          topPages: [
-            { path: '/', title: 'Sterling Connect | From Readiness to Opportunity', views: Math.round(totalPageViewsEstimate * 0.35) },
-            { path: '/opportunities', title: 'Opportunities Catalog', views: Math.round(totalPageViewsEstimate * 0.28) },
-            { path: '/assessment', title: 'Readiness Assessment Gate', views: Math.round(totalPageViewsEstimate * 0.16) },
-            { path: '/register', title: 'Candidate Registration', views: Math.round(totalPageViewsEstimate * 0.12) },
-            { path: '/about', title: 'About Sterling Connect', views: Math.round(totalPageViewsEstimate * 0.09) },
-          ],
-          keyEvents: [
-            { event: 'page_view', description: 'Triggered on every route transition via React Router', status: 'ACTIVE' },
-            { event: 'user_registered', description: 'Logged on successful new candidate sign up', status: 'ACTIVE' },
-            { event: 'pathway_selected', description: 'Triggered when candidate selects Career or Scholarship track', status: 'ACTIVE' },
-            { event: 'assessment_started', description: 'Candidate begins readiness questionnaire', status: 'ACTIVE' },
-            { event: 'assessment_completed', description: 'Candidate submits readiness assessment answers', status: 'ACTIVE' },
-            { event: 'opportunity_viewed', description: 'Detailed opportunity listing opened by candidate', status: 'ACTIVE' },
-            { event: 'opportunity_saved', description: 'Candidate bookmarks opportunity to dashboard', status: 'ACTIVE' },
-            { event: 'opportunity_applied', description: 'Candidate marks application as submitted/started', status: 'ACTIVE' },
-          ],
-        },
       },
     };
   }
@@ -2108,6 +2424,23 @@ export class AdminService {
     return { success: true, message: `Email template "${deleted.name}" removed.` };
   }
 
+  async bulkDeleteEmailTemplates(ids: string[], adminId: string, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No template IDs provided for bulk delete.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        this.deleteEmailTemplate(id, adminId, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Template ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, deletedCount: count, totalRequested: ids.length, errors };
+  }
+
   async sendTestEmail(templateId: string, recipientEmail: string, adminId: string) {
     let success = false;
     switch (templateId) {
@@ -2334,9 +2667,57 @@ export class AdminService {
     };
   }
 
+  async bulkRevokeStaff(ids: string[], currentAdmin: { id: string; role: UserRole }, ipAddress?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No staff IDs provided for bulk revoke.');
+    }
+    let count = 0;
+    const errors: string[] = [];
+    for (const id of ids) {
+      try {
+        await this.revokeStaffAccess(id, currentAdmin, ipAddress);
+        count++;
+      } catch (err: any) {
+        errors.push(`Staff ${id}: ${err.message}`);
+      }
+    }
+    return { success: true, revokedCount: count, totalRequested: ids.length, errors };
+  }
+
   // ==========================================
   // A15: SYSTEM SETTINGS & INTEGRATIONS
   // ==========================================
+  /**
+   * Publicly accessible platform links (consumed by Footer, mobile nav, user settings)
+   */
+  async getPublicSettings() {
+    const defaultLinks = {
+      academyUrl: 'https://learn.sterlinglrs.com',
+      corporateUrl: 'https://sterlinglrs.com',
+      privacyNoticeUrl: '/privacy',
+      termsUrl: '/terms',
+      supportEmail: 'support@sterlingconnect.org',
+    };
+
+    try {
+      const setting = await this.prisma.systemSetting.findUnique({
+        where: { key: 'links' },
+      });
+      if (setting && setting.value) {
+        const parsed = JSON.parse(setting.value);
+        return {
+          academyUrl: parsed.academyUrl || defaultLinks.academyUrl,
+          corporateUrl: parsed.corporateUrl || defaultLinks.corporateUrl,
+          privacyNoticeUrl: parsed.privacyNoticeUrl || defaultLinks.privacyNoticeUrl,
+          termsUrl: parsed.termsUrl || defaultLinks.termsUrl,
+          supportEmail: parsed.supportEmail || defaultLinks.supportEmail,
+        };
+      }
+    } catch {}
+
+    return defaultLinks;
+  }
+
   async getSystemSettings() {
     // 1. Fetch persisted DB overrides from SystemSetting table
     const persistedSettings = await this.prisma.systemSetting.findMany();
@@ -2377,56 +2758,54 @@ export class AdminService {
       enabled: true,
     };
 
+    const defaultApiEndpoints = {
+      coursesApiUrl: this.config.get<string>(
+        'STERLING_COURSES_API_URL',
+        'https://sterlinglrs.com/wp-json/tutor/v1/courses',
+      ),
+      coursePricesApiUrl: this.config.get<string>(
+        'STERLING_COURSE_PRICES_API_URL',
+        '',
+      ),
+      opportunitiesApiUrl: this.config.get<string>(
+        'STERLING_OPPORTUNITIES_API_URL',
+        'https://sterlinglrs.com/wp-json/tutor/v1/opportunities',
+      ),
+    };
+
     const links = settingsMap.get('links') || defaultLinks;
+    const apiEndpoints = settingsMap.get('apiEndpoints') || defaultApiEndpoints;
     const reminders = settingsMap.get('reminders') || defaultReminders;
     const security = settingsMap.get('security') || defaultSecurity;
     const googleAnalytics = settingsMap.get('googleAnalytics') || defaultGoogleAnalytics;
 
     return {
-      instruction: 'Configure approved links, reminders and integration settings.',
-      stateRule: 'Secrets must not be shown in the interface.',
+      instruction: 'Configure approved links, external API endpoints, reminders and integration settings.',
       settings: {
         links,
+        apiEndpoints,
         reminders,
         security,
         googleAnalytics,
-        smtp: {
-          host: this.config.get<string>('SMTP_HOST', 'smtp.gmail.com'),
-          port: this.config.get<number>('SMTP_PORT', 465),
-          senderEmail: this.config.get<string>('SMTP_FROM_EMAIL', 'amaefulemercy499@gmail.com'),
-          senderName: this.config.get<string>('SMTP_FROM_NAME', 'Sterling Connect'),
-          appPasswordMasked: '••••••••••••••••',
-        },
-        database: {
-          provider: 'TiDB Cloud Serverless MySQL',
-          host: 'gateway01.ap-northeast-1.prod.aws.tidbcloud.com',
-          port: 4000,
-          database: 'test',
-          user: '46h6j7100j4b.root',
-          passwordMasked: '••••••••••••',
-          connectionUri:
-            'mysql://46h6j7100j4b.root:••••••••••••@gateway01.ap-northeast-1.prod.aws.tidbcloud.com:4000/test?sslaccept=strict',
-          ssl: 'REQUIRED',
-        },
       },
     };
   }
 
   async updateSystemSettings(dto: any, adminId: string, ipAddress?: string) {
-    const keys = ['links', 'reminders', 'security', 'googleAnalytics'];
+    const keys = ['links', 'apiEndpoints', 'reminders', 'security', 'googleAnalytics'];
     for (const key of keys) {
       if (dto[key]) {
         await this.prisma.systemSetting.upsert({
           where: { key },
           update: {
             value: JSON.stringify(dto[key]),
-            category: key === 'googleAnalytics' ? 'INTEGRATIONS' : 'OPERATIONAL',
+            category: key === 'googleAnalytics' || key === 'apiEndpoints' ? 'INTEGRATIONS' : 'OPERATIONAL',
             updatedAt: new Date(),
           },
           create: {
             key,
             value: JSON.stringify(dto[key]),
-            category: key === 'googleAnalytics' ? 'INTEGRATIONS' : 'OPERATIONAL',
+            category: key === 'googleAnalytics' || key === 'apiEndpoints' ? 'INTEGRATIONS' : 'OPERATIONAL',
             isSecret: false,
           },
         });
@@ -2510,18 +2889,16 @@ export class AdminService {
 
   async testConnection() {
     try {
-      // 1. Check TiDB database query
+      // Check database connection
       await this.prisma.user.findFirst({ select: { id: true } });
 
       return {
         success: true,
-        database: 'Connected (TiDB Serverless)',
-        smtp: 'Configured (smtp.gmail.com:465)',
-        message: 'All system and integration connections healthy.',
+        message: 'All system services and database connections are operational.',
       };
     } catch (err: any) {
       throw new BadRequestException(
-        'Connection failed. Check the configuration and try again. Secrets must not be shown in the interface.',
+        'Connection test failed. Unable to communicate with the database.',
       );
     }
   }
@@ -2594,6 +2971,26 @@ export class AdminService {
     return { success: true, message: 'Audit log record deleted successfully.' };
   }
 
+  async bulkDeleteAuditLogs(ids: string[], adminId?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No audit log IDs provided for bulk delete.');
+    }
+    const res = await this.prisma.auditLog.deleteMany({
+      where: { id: { in: ids } },
+    });
+    if (adminId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: adminId,
+          action: 'AUDIT_LOGS_BULK_DELETED',
+          entityType: 'AuditLog',
+          payload: { count: res.count, ids },
+        },
+      });
+    }
+    return { success: true, deletedCount: res.count, totalRequested: ids.length };
+  }
+
   async clearAuditLogs(beforeDate?: string, adminId?: string) {
     const where: any = {};
     if (beforeDate) {
@@ -2635,6 +3032,26 @@ export class AdminService {
       });
     }
     return { success: true, message: 'Email delivery log record deleted successfully.' };
+  }
+
+  async bulkDeleteEmailLogs(ids: string[], adminId?: string) {
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new BadRequestException('No email log IDs provided for bulk delete.');
+    }
+    const res = await this.prisma.emailLog.deleteMany({
+      where: { id: { in: ids } },
+    });
+    if (adminId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: adminId,
+          action: 'EMAIL_LOGS_BULK_DELETED',
+          entityType: 'EmailLog',
+          payload: { count: res.count, ids },
+        },
+      });
+    }
+    return { success: true, deletedCount: res.count, totalRequested: ids.length };
   }
 
   async clearEmailLogs(beforeDate?: string, adminId?: string) {

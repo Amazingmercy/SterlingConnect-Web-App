@@ -2,8 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
+import { useSystemLinks } from '../context/SystemLinksContext';
 
 export const Footer: React.FC = () => {
+  const { links } = useSystemLinks();
   return (
     <footer className="bg-white border-t border-[#edf0f3] mt-auto">
       <div className="max-w-7xl mx-auto px-[max(5vw,24px)] py-12">
@@ -49,7 +51,7 @@ export const Footer: React.FC = () => {
             <ul className="space-y-2.5 text-[13px] font-medium text-[#42516a]">
               <li>
                 <a
-                  href="https://learn.sterlinglrs.com"
+                  href={links.academyUrl || 'https://learn.sterlinglrs.com'}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Open Sterling Academy in a new tab"
@@ -66,7 +68,7 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <a
-                  href="mailto:support@sterlinglrs.com"
+                  href={`mailto:${links.supportEmail || 'support@sterlingconnect.org'}`}
                   className="hover:text-[#087b63] transition-colors"
                 >
                   Help
@@ -82,14 +84,38 @@ export const Footer: React.FC = () => {
             </h4>
             <ul className="space-y-2.5 text-[13px] font-medium text-[#42516a]">
               <li>
-                <Link to="/terms" className="hover:text-[#087b63] transition-colors">
-                  Terms of Use
-                </Link>
+                {links.termsUrl && links.termsUrl.startsWith('http') ? (
+                  <a
+                    href={links.termsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 hover:text-[#087b63] transition-colors"
+                  >
+                    Terms of Use
+                    <ExternalLink size={11} />
+                  </a>
+                ) : (
+                  <Link to={links.termsUrl || '/terms'} className="hover:text-[#087b63] transition-colors">
+                    Terms of Use
+                  </Link>
+                )}
               </li>
               <li>
-                <Link to="/privacy" className="hover:text-[#087b63] transition-colors">
-                  Privacy Notice
-                </Link>
+                {links.privacyNoticeUrl && links.privacyNoticeUrl.startsWith('http') ? (
+                  <a
+                    href={links.privacyNoticeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 hover:text-[#087b63] transition-colors"
+                  >
+                    Privacy Notice
+                    <ExternalLink size={11} />
+                  </a>
+                ) : (
+                  <Link to={links.privacyNoticeUrl || '/privacy'} className="hover:text-[#087b63] transition-colors">
+                    Privacy Notice
+                  </Link>
+                )}
               </li>
               <li>
                 <span className="text-[11px] text-[#627086]">

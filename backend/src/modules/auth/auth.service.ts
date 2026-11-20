@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -14,10 +15,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { Pathway } from '@prisma/client';
+import { Pathway, UserRole, UserStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -84,6 +87,7 @@ export class AuthService {
         role: true,
         status: true,
         activePathway: true,
+        hasSelectedPathway: true,
         hasCompletedAssessment: true,
         isEmailVerified: true,
         createdAt: true,
@@ -107,24 +111,162 @@ export class AuthService {
   }
 
   /**
-   * Logs in user, verifies password, and sets cookies.
+   * Logs in user by verifying credentials against Sterling WordPress Token API:
+   * 1. Checks: POST https://sterlinglrs.com/wp-json/api/v1/token?username=...&password=...
+   * 2. If valid, fetches user info from: GET https://sterlinglrs.com/wp-json/wp/v2/users/me?context=edit
+   * 3. Automatically registers / updates user in local User table.
    */
   async login(dto: LoginDto, res: Response) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.trim().toLowerCase() },
-    });
+    const username = (dto.username || dto.email || '').trim();
+    const password = dto.password;
 
-    if (!user) {
-      throw new UnauthorizedException('We couldn’t sign you in with those details. Check your email and password.');
+    if (!username || !password) {
+      throw new UnauthorizedException('Please enter both username and password.');
+    }
+
+    let authenticatedWpUser: {
+      firstName: string;
+      lastName: string;
+      email: string;
+      username: string;
+    } | null = null;
+
+    // 1. Authenticate with Sterling WordPress Token API
+    try {
+      const tokenUrl = `https://sterlinglrs.com/wp-json/api/v1/token?username=${encodeURIComponent(
+        username,
+      )}&password=${encodeURIComponent(password)}`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+
+      const tokenRes = await fetch(tokenUrl, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'application/json',
+        },
+      });
+      clearTimeout(timeout);
+
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const jwtToken = tokenData.jwt_token || tokenData.token;
+
+        if (jwtToken) {
+          // 2. Fetch full profile from: https://sterlinglrs.com/wp-json/wp/v2/users/me?context=edit
+          const meController = new AbortController();
+          const meTimeout = setTimeout(() => meController.abort(), 7000);
+
+          const meRes = await fetch(
+            'https://sterlinglrs.com/wp-json/wp/v2/users/me?context=edit',
+            {
+              method: 'GET',
+              signal: meController.signal,
+              headers: {
+                Authorization: `Bearer ${jwtToken}`,
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                Accept: 'application/json',
+              },
+            },
+          );
+          clearTimeout(meTimeout);
+
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            authenticatedWpUser = {
+              firstName: meData.first_name || meData.name || username,
+              lastName: meData.last_name || '',
+              email: meData.email ? meData.email.trim().toLowerCase() : '',
+              username: meData.username || meData.slug || username,
+            };
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`External Sterling auth request failed: ${err.message}`);
+    }
+
+    let user: any = null;
+
+    if (authenticatedWpUser && authenticatedWpUser.email) {
+      // Find or automatically create registered user in local database
+      user = await this.prisma.user.findUnique({
+        where: { email: authenticatedWpUser.email },
+      });
+
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      if (!user) {
+        // Register new user from Sterling WordPress profile
+        user = await this.prisma.user.create({
+          data: {
+            email: authenticatedWpUser.email,
+            firstName: authenticatedWpUser.firstName,
+            lastName: authenticatedWpUser.lastName,
+            passwordHash,
+            isEmailVerified: true,
+            status: UserStatus.ACTIVE,
+            role: UserRole.USER,
+            activePathway: Pathway.EMPLOYMENT,
+          },
+        });
+
+        // Ensure CommonProfile exists
+        await this.prisma.commonProfile.create({
+          data: {
+            user: { connect: { id: user.id } },
+            locationCountry: 'Nigeria',
+            nationalities: JSON.stringify(['Nigeria']),
+            highestQualification: '',
+            fieldOfStudy: '',
+          },
+        });
+      } else {
+        // Update user profile in local DB
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            firstName: authenticatedWpUser.firstName || user.firstName,
+            lastName: authenticatedWpUser.lastName || user.lastName,
+            passwordHash,
+            status: UserStatus.ACTIVE,
+          },
+        });
+      }
+    } else {
+      // If external Sterling auth returned invalid:
+      // Check if it matches an existing administrative account in local DB (e.g. system admins)
+      const localUser = await this.prisma.user.findFirst({
+        where: {
+          OR: [{ email: username.toLowerCase() }],
+        },
+      });
+
+      if (
+        localUser &&
+        (localUser.role === UserRole.ADMIN || localUser.role === UserRole.SUPER_ADMIN)
+      ) {
+        const isMatch = await bcrypt.compare(password, localUser.passwordHash);
+        if (isMatch) {
+          user = localUser;
+        }
+      }
+
+      if (!user) {
+        throw new UnauthorizedException(
+          'Invalid username or password. If you do not have an account yet, please register',
+        );
+      }
     }
 
     if (user.status === 'SUSPENDED') {
-      throw new UnauthorizedException('This account has been suspended. Please contact support.');
-    }
-
-    const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!isMatch) {
-      throw new UnauthorizedException('We couldn’t sign you in with those details. Check your email and password.');
+      throw new UnauthorizedException(
+        'This account has been suspended. Please contact support.',
+      );
     }
 
     // Generate tokens
@@ -139,6 +281,7 @@ export class AuthService {
       role: user.role,
       status: user.status,
       activePathway: user.activePathway,
+      hasSelectedPathway: (user as any).hasSelectedPathway ?? false,
       hasCompletedAssessment: user.hasCompletedAssessment,
       isEmailVerified: user.isEmailVerified,
       createdAt: user.createdAt,
@@ -183,6 +326,7 @@ export class AuthService {
         role: true,
         status: true,
         activePathway: true,
+        hasSelectedPathway: true,
         hasCompletedAssessment: true,
         isEmailVerified: true,
         createdAt: true,
@@ -275,10 +419,11 @@ export class AuthService {
   async updatePathway(userId: string, pathway: Pathway, goal?: string, stage?: string) {
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { activePathway: pathway },
+      data: { activePathway: pathway, hasSelectedPathway: true },
       select: {
         id: true,
         activePathway: true,
+        hasSelectedPathway: true,
       },
     });
 

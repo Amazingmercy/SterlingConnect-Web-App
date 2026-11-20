@@ -5,24 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import { trackUserRegistered } from '../../utils/analytics';
-
-const COUNTRIES = [
-  'Nigeria',
-  'Ghana',
-  'Kenya',
-  'South Africa',
-  'Rwanda',
-  'Uganda',
-  'Tanzania',
-  'Egypt',
-  'United Kingdom',
-  'Canada',
-  'United States',
-  'Germany',
-  'Other',
-];
 
 const NATIONALITIES = [
   'Nigerian',
@@ -58,7 +41,6 @@ export const RegisterPage: React.FC = () => {
     firstName: '',
     lastName: '',
     email: '',
-    country: 'Nigeria',
     password: '',
     agreeToTerms: false,
     marketing: false,
@@ -221,67 +203,52 @@ export const RegisterPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Row 3: Country of Residence & Nationality or nationalities (Multi-select) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Select
-              label="Country of residence"
-              required
-              value={formData.country}
-              onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-            >
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-
-            <div>
-              <label className="text-[12px] font-bold text-[#102641] tracking-tight block mb-1">
-                Nationality or nationalities <span className="text-red-500">*</span>
-              </label>
-              <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] p-1.5 rounded-lg border border-[#e4eaf0] bg-white">
-                {nationalities.map((nat) => (
-                  <span
-                    key={nat}
-                    className="inline-flex items-center gap-1 bg-[#e3f4ed] text-[#087b63] border border-[#bddbd1] text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                  >
-                    <span>{nat}</span>
-                    {nationalities.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setNationalities(nationalities.filter((n) => n !== nat))}
-                        className="hover:text-red-600 focus:outline-none"
-                        aria-label={`Remove ${nat}`}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </span>
-                ))}
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val && !nationalities.includes(val)) {
-                      setNationalities([...nationalities, val]);
-                    }
-                  }}
-                  className="text-xs text-[#526078] bg-transparent border-none focus:ring-0 outline-none cursor-pointer py-1"
-                  aria-label="Add additional nationality"
+          {/* Nationality or nationalities (Multi-select) */}
+          <div>
+            <label className="text-[12px] font-bold text-[#102641] tracking-tight block mb-1">
+              Nationality or nationalities <span className="text-red-500">*</span>
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5 min-h-[42px] p-1.5 rounded-lg border border-[#e4eaf0] bg-white">
+              {nationalities.map((nat) => (
+                <span
+                  key={nat}
+                  className="inline-flex items-center gap-1 bg-[#e3f4ed] text-[#087b63] border border-[#bddbd1] text-[11px] font-semibold px-2 py-0.5 rounded-full"
                 >
-                  <option value="">+ Add nationality</option>
-                  {NATIONALITIES.filter((n) => !nationalities.includes(n)).map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {fieldErrors.nationality && (
-                <p className="text-[11px] font-medium text-red-600 mt-1">{fieldErrors.nationality}</p>
-              )}
+                  <span>{nat}</span>
+                  {nationalities.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setNationalities(nationalities.filter((n) => n !== nat))}
+                      className="hover:text-red-600 focus:outline-none"
+                      aria-label={`Remove ${nat}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </span>
+              ))}
+              <select
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val && !nationalities.includes(val)) {
+                    setNationalities([...nationalities, val]);
+                  }
+                }}
+                className="text-xs text-[#526078] bg-transparent border-none focus:ring-0 outline-none cursor-pointer py-1"
+                aria-label="Add additional nationality"
+              >
+                <option value="">+ Add nationality</option>
+                {NATIONALITIES.filter((n) => !nationalities.includes(n)).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
+            {fieldErrors.nationality && (
+              <p className="text-[11px] font-medium text-red-600 mt-1">{fieldErrors.nationality}</p>
+            )}
           </div>
 
           {/* Row 4: Terms & Marketing Checkboxes */}

@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useProfile } from '../../context/ProfileContext';
 import { useAssessment } from '../../context/AssessmentContext';
 import { useToast } from '../../context/ToastContext';
+import { useSystemLinks } from '../../context/SystemLinksContext';
 import { api } from '../../services/api';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -28,6 +29,7 @@ import type { PathwayType } from '../../types/auth';
 export const SettingsPage: React.FC = () => {
   const { user, updateUser, setPathway } = useAuth();
   const { profile } = useProfile();
+  const { links } = useSystemLinks();
   const { resetAssessment } = useAssessment();
   const { toast } = useToast();
 
@@ -625,13 +627,25 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           {/* Privacy Link: "Read our Privacy Notice" */}
-          <Link
-            to="/privacy"
-            className="text-xs font-bold text-[#087b63] hover:underline flex items-center gap-1"
-          >
-            <span>Read our Privacy Notice</span>
-            <ExternalLink size={12} />
-          </Link>
+          {links.privacyNoticeUrl?.startsWith('http') ? (
+            <a
+              href={links.privacyNoticeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-bold text-[#087b63] hover:underline flex items-center gap-1"
+            >
+              <span>Read our Privacy Notice</span>
+              <ExternalLink size={12} />
+            </a>
+          ) : (
+            <Link
+              to={links.privacyNoticeUrl || '/privacy'}
+              className="text-xs font-bold text-[#087b63] hover:underline flex items-center gap-1"
+            >
+              <span>Read our Privacy Notice</span>
+              <ExternalLink size={12} />
+            </Link>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -693,9 +707,20 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="flex items-center justify-between pt-1">
-              <Link to="/privacy" className="text-[11px] font-bold text-red-700 hover:underline">
-                Read our Privacy Notice
-              </Link>
+              {links.privacyNoticeUrl?.startsWith('http') ? (
+                <a
+                  href={links.privacyNoticeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-bold text-red-700 hover:underline"
+                >
+                  Read our Privacy Notice
+                </a>
+              ) : (
+                <Link to={links.privacyNoticeUrl || '/privacy'} className="text-[11px] font-bold text-red-700 hover:underline">
+                  Read our Privacy Notice
+                </Link>
+              )}
               <Button
                 variant="danger"
                 size="sm"

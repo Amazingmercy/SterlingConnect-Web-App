@@ -12,7 +12,11 @@ import {
   ShieldCheck,
   Clock,
   Share2,
+  Sparkles,
+  Lightbulb,
+  TrendingUp,
 } from 'lucide-react';
+import { api } from '../../services/api';
 import { useOpportunities } from '../../context/OpportunityContext';
 import { useApplications } from '../../context/ApplicationContext';
 import { useAuth } from '../../context/AuthContext';
@@ -20,6 +24,7 @@ import { useToast } from '../../context/ToastContext';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { NotFoundPage } from '../../pages/NotFoundPage';
+import { HaveYouAppliedModal } from './HaveYouAppliedModal';
 import {
   trackOpportunityViewed,
   trackOpportunitySaved,
@@ -35,8 +40,30 @@ export const OpportunityDetailPage: React.FC = () => {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'eligibility' | 'application'>('overview');
+  const [aiMatchData, setAiMatchData] = useState<any | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
+  const [showAppliedPrompt, setShowAppliedPrompt] = useState<boolean>(false);
 
   const opp = opportunities.find((o) => o.id === id);
+
+  useEffect(() => {
+    if (isAuthenticated && opp?.id) {
+      setIsLoadingAi(true);
+      api
+        .get(`/opportunities/${opp.id}/ai-match-explanation`)
+        .then((res) => {
+          if (res.data?.success && res.data?.aiExplanation) {
+            setAiMatchData(res.data.aiExplanation);
+          }
+        })
+        .catch(() => {
+          // Graceful fallback to rules engine
+        })
+        .finally(() => {
+          setIsLoadingAi(false);
+        });
+    }
+  }, [isAuthenticated, opp?.id]);
 
   if (!opp) {
     return <NotFoundPage />;
@@ -49,6 +76,43 @@ export const OpportunityDetailPage: React.FC = () => {
   const deadlineDate = new Date(opp.deadline);
   const today = new Date();
   const diffDays = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Prompt user if they have applied when visiting details
+  useEffect(() => {
+    if (!isAuthenticated || !opp?.id) return;
+    const hasAlreadyApplied =
+      existingApp &&
+      existingApp.status !== 'PREPARING' &&
+      existingApp.status !== 'SAVED';
+    const isDismissed = sessionStorage.getItem(`dismissed_applied_prompt_${opp.id}`);
+
+    if (!hasAlreadyApplied && !isDismissed) {
+      const timer = setTimeout(() => {
+        setShowAppliedPrompt(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, opp?.id, existingApp]);
+
+  const handleConfirmApplied = async () => {
+    if (!opp) return;
+    await addOrUpdateApplication(
+      opp.id,
+      'APPLIED',
+      'Marked as applied from opportunity detail check-in.',
+      new Date().toISOString().split('T')[0],
+    );
+    toast('Application added to your tracker! Follow your milestones here.');
+    setShowAppliedPrompt(false);
+    navigate('/applications');
+  };
+
+  const handleDismissAppliedPrompt = () => {
+    if (opp?.id) {
+      sessionStorage.setItem(`dismissed_applied_prompt_${opp.id}`, 'true');
+    }
+    setShowAppliedPrompt(false);
+  };
   const isClosed = diffDays < 0;
 
   const isScholarship = opp.opportunityType === 'SCHOLARSHIP';
@@ -75,7 +139,7 @@ export const OpportunityDetailPage: React.FC = () => {
 
   const handleSaveOpportunity = async () => {
     if (!isAuthenticated) {
-      navigate(`/register?returnTo=/opportunities/${opp.id}`);
+      navigate(`/sign-in?returnTo=/opportunities/${opp.id}`);
       return;
     }
 
@@ -147,10 +211,6 @@ export const OpportunityDetailPage: React.FC = () => {
                 {evaluation.gatePassed && evaluation.score > 0 && (
                   <span className="font-mono">({evaluation.score}%)</span>
                 )}
-              </span>
-
-              <span className="text-[11px] font-bold text-[#627086] bg-slate-100 px-2.5 py-0.5 rounded">
-                Ref: {opp.referenceCode}
               </span>
             </div>
 
@@ -237,10 +297,10 @@ export const OpportunityDetailPage: React.FC = () => {
         {/* Logged Out Save Prompt */}
         {!isAuthenticated && (
           <div className="p-3 rounded-lg bg-blue-50/70 border border-blue-200 text-xs text-blue-900 flex items-center justify-between gap-3">
-            <span>Create an account to save this opportunity and track your progress.</span>
-            <Link to={`/register?returnTo=/opportunities/${opp.id}`}>
+            <span>Sign in with your Sterling account to save this opportunity and track your progress.</span>
+            <Link to={`/sign-in?returnTo=/opportunities/${opp.id}`}>
               <Button variant="primary" size="sm" className="whitespace-nowrap">
-                Create account
+                Sign in
               </Button>
             </Link>
           </div>
@@ -288,47 +348,134 @@ export const OpportunityDetailPage: React.FC = () => {
         This opportunity is advertised by {opp.organization}. Sterling Connect is not responsible for recruitment, selection or award decisions. Review the official requirements and apply directly through the provider.
       </div>
 
-      {/* Transparent Match Explainer Card */}
-      <Card className="p-6 sm:p-7 space-y-4 border-2 border-[#087b63]/20 bg-gradient-to-br from-white to-[#f5faf8] rounded-2xl">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#e3f4ed] text-[#087b63] grid place-items-center flex-shrink-0">
-            <Target size={18} />
-          </div>
-          <div>
-            <h3 className="font-brand font-bold text-base text-[#102641]">
-              Why this opportunity matches your profile
-            </h3>
-            <p className="text-xs text-[#627086]">
-              Calculated using transparent rules-based matching against your profile attributes.
-            </p>
-          </div>
-        </div>
-
-        {/* Top Verified Match Reasons */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          {evaluation.matchedReasons.map((reason, idx) => (
-            <div
-              key={idx}
-              className="p-3.5 rounded-[10px] bg-white border border-[#bddbd1] space-y-1.5 shadow-xs"
-            >
-              <div className="flex items-center gap-1.5 text-[#087b63] font-bold text-[11px]">
-                <CheckCircle2 size={14} />
-                <span>Verified Match Factor</span>
+      {/* Dynamic AI-Powered Match Explainer Card */}
+      <Card className="p-6 sm:p-7 space-y-5 border-2 border-[#087b63]/25 bg-gradient-to-br from-white via-[#f7faf9] to-[#edf7f3] rounded-2xl shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#bddbd1]/60 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#087b63] to-[#0ba384] text-white grid place-items-center shadow-md flex-shrink-0">
+              <Sparkles size={20} className="animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-brand font-bold text-base sm:text-lg text-[#102641]">
+                  Why this opportunity matches your profile
+                </h3>
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide bg-[#087b63] text-white shadow-xs">
+                  <Sparkles size={10} /> AI Dynamic Match
+                </span>
               </div>
-              <p className="text-xs text-[#102641] font-medium leading-relaxed">
-                {reason}
+              <p className="text-xs text-[#526078] mt-0.5">
+                AI synthesis combining transparent rules matching with your verified credentials.
               </p>
             </div>
-          ))}
+          </div>
+          {aiMatchData?.matchConfidence && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-100/70 border border-emerald-300 text-[11px] font-bold text-emerald-900 self-start sm:self-auto">
+              <TrendingUp size={13} className="text-emerald-700" />
+              <span>{aiMatchData.matchConfidence}</span>
+            </div>
+          )}
         </div>
+
+        {/* AI Executive Alignment Thesis / Headline */}
+        {aiMatchData?.headline ? (
+          <div className="p-4 rounded-xl bg-white border border-[#a2d4c5] shadow-xs space-y-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-[#087b63] flex items-center gap-1.5">
+              <Target size={13} />
+              <span>Executive Match Thesis</span>
+            </div>
+            <p className="text-xs sm:text-[13px] font-medium text-[#102641] leading-relaxed">
+              {aiMatchData.headline}
+            </p>
+            {aiMatchData.executiveSummary && (
+              <p className="text-xs text-[#526078] leading-relaxed pt-1 whitespace-pre-line border-t border-slate-100">
+                {aiMatchData.executiveSummary}
+              </p>
+            )}
+          </div>
+        ) : isLoadingAi ? (
+          <div className="p-4 rounded-xl bg-white/80 border border-slate-200 flex items-center gap-2 text-xs text-slate-600 animate-pulse">
+            <Sparkles size={16} className="text-[#087b63] animate-spin" />
+            <span>Analyzing match criteria and profile alignment with AI...</span>
+          </div>
+        ) : null}
+
+        {/* Competitive Match Pillars (AI Generated from Rules Results) */}
+        {aiMatchData?.competitivePillars && aiMatchData.competitivePillars.length > 0 ? (
+          <div className="space-y-2 pt-1">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[#102641]">
+              Competitive Advantage Pillars
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {aiMatchData.competitivePillars.map((pillar: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl bg-white border border-[#bddbd1] space-y-1.5 shadow-xs hover:border-[#087b63] transition"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-[11px] font-bold text-[#087b63] flex items-center gap-1 truncate">
+                      <CheckCircle2 size={13} className="flex-shrink-0" />
+                      {pillar.title}
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      {pillar.impactLevel || 'VERIFIED'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-semibold text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 inline-block">
+                    {pillar.matchFactor}
+                  </div>
+                  <p className="text-[11px] text-[#42516a] leading-relaxed">
+                    {pillar.explanation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* Fallback Rule Match Factors */
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            {evaluation.matchedReasons.map((reason, idx) => (
+              <div
+                key={idx}
+                className="p-3.5 rounded-[10px] bg-white border border-[#bddbd1] space-y-1.5 shadow-xs"
+              >
+                <div className="flex items-center gap-1.5 text-[#087b63] font-bold text-[11px]">
+                  <CheckCircle2 size={14} />
+                  <span>Verified Match Factor</span>
+                </div>
+                <p className="text-xs text-[#102641] font-medium leading-relaxed">
+                  {reason}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Dynamic Strategic Advice & Application Recommendations */}
+        {aiMatchData?.strategicAdvice && aiMatchData.strategicAdvice.length > 0 && (
+          <div className="p-4 rounded-xl bg-[#f0f9f6] border border-[#a2d4c5] space-y-2.5">
+            <div className="flex items-center gap-1.5 text-[#087b63] font-bold text-xs uppercase tracking-wide">
+              <Lightbulb size={15} />
+              <span>Strategic Application Guidance</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {aiMatchData.strategicAdvice.map((item: any, idx: number) => (
+                <div key={idx} className="bg-white p-3 rounded-lg border border-[#c1e2d7] text-xs space-y-1 shadow-2xs">
+                  <span className="font-bold text-[#102641] block">{item.tip}</span>
+                  <p className="text-[11px] text-[#526078] leading-relaxed">{item.actionItem}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action Needed Warnings if any */}
         {evaluation.warnings.length > 0 && (
-          <div className="space-y-2 pt-2">
+          <div className="space-y-2 pt-1">
             {evaluation.warnings.map((warning, idx) => (
               <div
                 key={idx}
-                className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed"
+                className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-900 leading-relaxed shadow-xs"
               >
                 <AlertTriangle size={15} className="text-amber-700 flex-shrink-0 mt-0.5" />
                 <span>{warning}</span>
@@ -518,6 +665,17 @@ export const OpportunityDetailPage: React.FC = () => {
           </Button>
         )}
       </div>
+
+      {/* Pop-up modal asking user if they have applied for easy tracking */}
+      <HaveYouAppliedModal
+        isOpen={showAppliedPrompt}
+        onClose={handleDismissAppliedPrompt}
+        onConfirmApplied={handleConfirmApplied}
+        opportunityTitle={opp.title}
+        organization={opp.organization}
+        deadline={opp.deadline ? new Date(opp.deadline).toLocaleDateString() : undefined}
+        daysLeft={diffDays}
+      />
     </div>
   );
 };

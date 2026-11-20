@@ -256,8 +256,8 @@ export const VerifyEmailPage: React.FC = () => {
 
               <p className="pt-2 border-t border-[#edf0f3]">
                 Wrong email?{' '}
-                <Link to="/register" className="font-bold text-[#087b63] hover:underline">
-                  Change email address
+                <Link to="/sign-in" className="font-bold text-[#087b63] hover:underline">
+                  Sign in again
                 </Link>
               </p>
             </div>

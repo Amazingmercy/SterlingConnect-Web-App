@@ -69,6 +69,11 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, []);
 
+  // Wipe state whenever the active user account changes
+  useEffect(() => {
+    setApplications([]);
+  }, [user?.id]);
+
   const fetchApplications = useCallback(async () => {
     if (!user) {
       setApplications([]);
@@ -93,12 +98,8 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const res = await api.get('/applications');
       if (res.data?.applications) {
         const mapped = res.data.applications.map(mapBackendApp);
-        setApplications((prev) => {
-          // Merge server state while preserving any pending local application
-          const serverOppIds = new Set(mapped.map((m: UserApplication) => m.opportunityId));
-          const pendingLocal = prev.filter((p) => !serverOppIds.has(p.opportunityId));
-          return [...mapped, ...pendingLocal];
-        });
+        // Server state for THIS user is the authoritative source
+        setApplications(mapped);
         localStorage.setItem(appKey, JSON.stringify(mapped));
       }
     } catch {

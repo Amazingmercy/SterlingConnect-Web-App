@@ -15,17 +15,21 @@ import {
 import { useApplications } from '../../context/ApplicationContext';
 import { useOpportunities } from '../../context/OpportunityContext';
 import { ApplicationCard } from './ApplicationCard';
+import { ApplicationMilestoneCheckInModal } from './ApplicationMilestoneCheckInModal';
 import { Button } from '../../components/ui/Button';
+import { useToast } from '../../context/ToastContext';
 import type { ApplicationStatus } from '../../types/application';
 
 type PipelineFilterTab = 'ALL' | 'PREPARING' | 'APPLIED' | 'INTERVIEW' | 'OUTCOMES';
 
 export const ApplicationPipelinePage: React.FC = () => {
-  const { applications, metrics, refreshApplications } = useApplications();
+  const { applications, metrics, refreshApplications, addOrUpdateApplication } = useApplications();
   const { opportunities, refreshOpportunities } = useOpportunities();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<PipelineFilterTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'SCHOLARSHIP' | 'EMPLOYMENT'>('ALL');
+  const [checkInApp, setCheckInApp] = useState<(typeof applications)[0] | null>(null);
 
   useEffect(() => {
     refreshApplications();
@@ -43,6 +47,67 @@ export const ApplicationPipelinePage: React.FC = () => {
     });
     return map;
   }, [opportunities]);
+
+  // Automated Milestone & Deadline Follow-Through Pop-up Check-in
+  useEffect(() => {
+    if (!applications || applications.length === 0) return;
+
+    // Look for active application qualifying for check-in:
+    // 1. Deadline within 30 days and status is PREPARING/SAVED
+    // 2. Or status is APPLIED, SHORTLISTED, or INTERVIEW
+    const candidateApp = applications.find((app) => {
+      if (
+        app.status === 'OFFER_SUCCESSFUL' ||
+        app.status === 'AWARDED' ||
+        app.status === 'UNSUCCESSFUL' ||
+        app.status === 'WITHDRAWN'
+      ) {
+        return false;
+      }
+      if (sessionStorage.getItem(`checkin_prompt_${app.id}`)) {
+        return false;
+      }
+
+      const opp = app.opportunity || opportunityMap.get(app.opportunityId);
+      if (opp?.deadline) {
+        const daysLeft = Math.ceil(
+          (new Date(opp.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        );
+        if (daysLeft >= 0 && daysLeft <= 30) {
+          return true;
+        }
+      }
+
+      return (
+        app.status === 'APPLIED' ||
+        app.status === 'SHORTLISTED' ||
+        app.status === 'INTERVIEW'
+      );
+    });
+
+    if (candidateApp) {
+      const timer = setTimeout(() => {
+        setCheckInApp(candidateApp);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [applications, opportunityMap]);
+
+  const handleUpdateStatus = async (status: ApplicationStatus, notes?: string) => {
+    if (!checkInApp) return;
+    await addOrUpdateApplication(checkInApp.opportunityId, status, notes);
+    toast(`Milestone updated to ${status}.`);
+    sessionStorage.setItem(`checkin_prompt_${checkInApp.id}`, 'true');
+    setCheckInApp(null);
+    refreshApplications();
+  };
+
+  const handleDismissCheckIn = () => {
+    if (checkInApp) {
+      sessionStorage.setItem(`checkin_prompt_${checkInApp.id}`, 'true');
+    }
+    setCheckInApp(null);
+  };
 
   // Tab definitions with dynamic counts
   const tabs: { id: PipelineFilterTab; label: string; count: number }[] = [
@@ -277,14 +342,6 @@ export const ApplicationPipelinePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Tracker Overview Bar (U20: labels - Opportunity | Status | Application date | Next action | Notes | Last updated) */}
-        <div className="hidden lg:flex items-center justify-between px-5 py-2.5 bg-[#f8fafb] border border-[#e4eaf0] rounded-xl text-[11px] font-bold text-[#627086] uppercase tracking-wider">
-          <span className="w-2/5">Opportunity</span>
-          <span className="w-1/6">Status</span>
-          <span className="w-1/6">Application date</span>
-          <span className="w-1/4">Next action</span>
-          <span className="w-1/6 text-right">Last updated</span>
-        </div>
 
         {/* Applications List */}
         {filteredApplications.length > 0 ? (
@@ -369,6 +426,20 @@ export const ApplicationPipelinePage: React.FC = () => {
               )}
             </div>
           </div>
+        )}
+
+        {/* Milestone and Deadline Follow-Through Pop-up Modal */}
+        {checkInApp && (
+          <ApplicationMilestoneCheckInModal
+            isOpen={Boolean(checkInApp)}
+            onClose={handleDismissCheckIn}
+            application={checkInApp}
+            opportunity={
+              checkInApp.opportunity ||
+              opportunityMap.get(checkInApp.opportunityId)
+            }
+            onUpdateStatus={handleUpdateStatus}
+          />
         )}
       </div>
   );

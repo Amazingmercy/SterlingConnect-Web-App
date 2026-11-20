@@ -14,9 +14,11 @@ import {
   Clock,
   Briefcase,
   GraduationCap,
+  Trash2,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 import { Pagination } from '../../components/ui/Pagination';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 
 export const AdminApplicationsPage: React.FC = () => {
   const { toast } = useToast();
@@ -28,8 +30,15 @@ export const AdminApplicationsPage: React.FC = () => {
   // View Application Details modal state (Read-only)
   const [viewingApp, setViewingApp] = useState<any | null>(null);
 
+  // Delete & Bulk Delete state
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+
   const fetchApplications = async (targetPage = page) => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const params = new URLSearchParams();
       params.set('page', String(targetPage));
@@ -48,6 +57,51 @@ export const AdminApplicationsPage: React.FC = () => {
   useEffect(() => {
     fetchApplications(1);
   }, [statusFilter]);
+
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === (data?.applications?.length || 0) && (data?.applications?.length || 0) > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds((data?.applications || []).map((a: any) => a.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeDeleteApplication = async () => {
+    if (!deleteTarget) return;
+    setIsProcessing(true);
+    try {
+      await api.delete(`/admin/applications-outcomes/${deleteTarget.id}`);
+      toast('Application record removed.');
+      setDeleteTarget(null);
+      fetchApplications(page);
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete application.', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const executeBulkDeleteApplications = async () => {
+    if (selectedIds.length === 0) return;
+    setIsProcessing(true);
+    try {
+      const res = await api.post('/admin/applications-outcomes/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} application records.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchApplications(page);
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete selected applications.', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
 
 
@@ -173,6 +227,32 @@ export const AdminApplicationsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'application' : 'applications'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Applications Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -184,6 +264,18 @@ export const AdminApplicationsPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        (data?.applications?.length || 0) > 0 &&
+                        selectedIds.length === data.applications.length
+                      }
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
                   <th className="py-3 px-4">Candidate</th>
                   <th className="py-3 px-4">Opportunity</th>
                   <th className="py-3 px-4">Current Stage</th>
@@ -195,13 +287,26 @@ export const AdminApplicationsPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {data?.applications?.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500">
+                    <td colSpan={7} className="py-12 text-center text-slate-500">
                       No applications recorded yet.
                     </td>
                   </tr>
                 ) : (
                   data?.applications?.map((app: any) => (
-                    <tr key={app.id} className="hover:bg-slate-50 transition">
+                    <tr
+                      key={app.id}
+                      className={`hover:bg-slate-50 transition ${
+                        selectedIds.includes(app.id) ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(app.id)}
+                          onChange={() => handleToggleSelectOne(app.id)}
+                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900">
                           {app.user?.firstName} {app.user?.lastName}
@@ -212,8 +317,8 @@ export const AdminApplicationsPage: React.FC = () => {
                         <div className="font-semibold text-slate-800 line-clamp-1">
                           {app.opportunity?.title}
                         </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {app.opportunity?.referenceCode} • {app.opportunity?.organization}
+                        <div className="text-[11px] text-slate-500">
+                          {app.opportunity?.organization}
                         </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -251,15 +356,25 @@ export const AdminApplicationsPage: React.FC = () => {
                         {new Date(app.updatedAt).toLocaleDateString()}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setViewingApp(app)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
-                          title="View application details"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-slate-600" />
-                          <span>View</span>
-                        </button>
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setViewingApp(app)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                            title="View application details"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-600" />
+                            <span>View</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(app)}
+                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer transition"
+                            title="Delete application record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -343,8 +458,8 @@ export const AdminApplicationsPage: React.FC = () => {
                     <span>{viewingApp.opportunity?.organization}</span>
                   </div>
                   <div>
-                    <span className="font-semibold block text-slate-500">Reference Code:</span>
-                    <span className="font-mono text-[11px]">{viewingApp.opportunity?.referenceCode}</span>
+                    <span className="font-semibold block text-slate-500">Opportunity ID:</span>
+                    <span className="font-mono text-[11px]">{viewingApp.opportunity?.id?.slice(0, 8)}</span>
                   </div>
                   <div>
                     <span className="font-semibold block text-slate-500">Type / Pathway:</span>
@@ -446,6 +561,33 @@ export const AdminApplicationsPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Delete Single Application Confirmation */}
+      <ConfirmationModal
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={executeDeleteApplication}
+        title="Delete application record?"
+        description={`Are you sure you want to remove the application for "${deleteTarget?.opportunity?.title}" submitted by ${deleteTarget?.user?.firstName} ${deleteTarget?.user?.lastName}? This action cannot be undone.`}
+        confirmLabel={isProcessing ? 'Deleting...' : 'Delete Application'}
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
+        isLoading={isProcessing}
+      />
+
+      {/* Bulk Delete Applications Confirmation */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteApplications}
+        title={`Delete ${selectedIds.length} application records?`}
+        description={`Are you sure you want to permanently remove these ${selectedIds.length} selected application records? This action cannot be undone.`}
+        confirmLabel={isProcessing ? 'Deleting...' : `Delete ${selectedIds.length} Records`}
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="trash"
+        isLoading={isProcessing}
+      />
     </div>
   );
 };

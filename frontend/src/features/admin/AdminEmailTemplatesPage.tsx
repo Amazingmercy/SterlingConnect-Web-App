@@ -22,10 +22,13 @@ export const AdminEmailTemplatesPage: React.FC = () => {
 
   // Delete Template confirmation
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTemplates = async () => {
     setIsLoading(true);
+    setSelectedIds([]);
     try {
       const res = await api.get('/admin/email-templates');
       setData(res.data);
@@ -103,6 +106,36 @@ export const AdminEmailTemplatesPage: React.FC = () => {
     }
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === (data?.templates?.length || 0) && (data?.templates?.length || 0) > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds((data?.templates || []).map((t: any) => t.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteTemplates = async () => {
+    if (selectedIds.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const res = await api.post('/admin/email-templates/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} email templates.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchTemplates();
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete selected templates.', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -149,18 +182,57 @@ export const AdminEmailTemplatesPage: React.FC = () => {
         </p>
       </div>
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'template' : 'templates'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Templates List */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {data?.templates?.map((tpl: any) => (
           <div
             key={tpl.id}
-            className="bg-white rounded-xl border border-slate-200 shadow-xs p-5 flex flex-col justify-between"
+            className={`bg-white rounded-xl border shadow-xs p-5 flex flex-col justify-between transition ${
+              selectedIds.includes(tpl.id)
+                ? 'border-amber-400 bg-amber-50/20 ring-2 ring-amber-300'
+                : 'border-slate-200'
+            }`}
           >
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-mono text-slate-500 font-bold px-2 py-0.5 bg-slate-100 rounded">
-                  {tpl.id}
-                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(tpl.id)}
+                    onChange={() => handleToggleSelectOne(tpl.id)}
+                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                    title={`Select ${tpl.id}`}
+                  />
+                  <span className="text-[10px] font-mono text-slate-500 font-bold px-2 py-0.5 bg-slate-100 rounded">
+                    {tpl.id}
+                  </span>
+                </div>
                 <span
                   className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                     tpl.status === 'ACTIVE'
@@ -320,6 +392,20 @@ export const AdminEmailTemplatesPage: React.FC = () => {
         title={`Delete template "${deleteTarget?.id}"?`}
         description={`Are you sure you want to delete template "${deleteTarget?.name}"? Automated notifications tied to this trigger will be suspended.`}
         confirmLabel="Delete Template"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="warning"
+        isLoading={isDeleting}
+      />
+
+      {/* Bulk Delete Templates Confirmation */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteTemplates}
+        title={`Delete ${selectedIds.length} email templates?`}
+        description={`Are you sure you want to delete these ${selectedIds.length} selected email templates? Automated triggers tied to them will be suspended.`}
+        confirmLabel={isDeleting ? 'Deleting...' : `Delete ${selectedIds.length} Templates`}
         cancelLabel="Cancel"
         variant="danger"
         icon="warning"

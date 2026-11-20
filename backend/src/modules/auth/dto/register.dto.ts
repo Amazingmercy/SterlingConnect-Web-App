@@ -18,9 +18,9 @@ export class RegisterDto {
   @MinLength(12, { message: 'Use at least 12 characters. You can use a passphrase.' })
   password: string;
 
-  @IsNotEmpty({ message: 'Country of residence is required' })
+  @IsOptional()
   @IsString()
-  country: string;
+  country?: string;
 
   @IsNotEmpty({ message: 'Nationality is required' })
   @IsString()

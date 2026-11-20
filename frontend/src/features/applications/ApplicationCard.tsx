@@ -104,9 +104,6 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
           <span className={`text-[11px] font-bold px-3 py-0.5 rounded-full border ${badge.color}`}>
             {badge.label}
           </span>
-          <span className="text-[11px] text-[#627086] font-mono">
-            {opportunity.referenceCode}
-          </span>
         </div>
 
         <div className="text-[11px] text-[#627086]">

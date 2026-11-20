@@ -26,15 +26,12 @@ import {
   UserCheck,
   Settings,
   ArrowRight,
-  Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications } from '../context/NotificationContext';
 
 export const SideNav: React.FC = () => {
   const location = useLocation();
   const { user } = useAuth();
-  const { unreadCount } = useNotifications();
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   const isAdminRoute = location.pathname.startsWith('/admin');
 
@@ -43,11 +40,9 @@ export const SideNav: React.FC = () => {
     { label: 'Opportunities', path: '/opportunities', icon: BriefcaseBusiness },
     { label: 'Saved Opportunities', path: '/saved', icon: Bookmark },
     { label: 'Readiness Assessment', path: '/assessment', icon: ClipboardCheck },
-    { label: 'My Action Plan', path: '/action-plan', icon: ClipboardList },
     { label: 'My Applications', path: '/applications', icon: FileText },
     { label: 'Recommendations', path: '/recommendations', icon: Lightbulb },
     { label: 'Profile', path: '/profile', icon: UserRound },
-    { label: 'Notifications', path: '/notifications', icon: Bell, badge: unreadCount },
     { label: 'Settings', path: '/settings', icon: SlidersHorizontal },
   ];
 
@@ -149,11 +144,6 @@ export const SideNav: React.FC = () => {
                         className={isActive ? 'text-[#087b63]' : 'text-[#627086]'}
                       />
                       <span className="flex-1 truncate">{item.label}</span>
-                      {item.badge !== undefined && item.badge > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-[#087b63] text-white font-extrabold leading-none">
-                          {item.badge}
-                        </span>
-                      )}
                     </Link>
                   );
                 })}

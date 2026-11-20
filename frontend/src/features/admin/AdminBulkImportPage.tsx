@@ -102,6 +102,34 @@ export const AdminBulkImportPage: React.FC = () => {
     link.click();
   };
 
+  const handleDownloadTemplate = async (type: 'EMPLOYMENT' | 'SCHOLARSHIP', format: 'csv' | 'xlsx') => {
+    try {
+      const res = await api.get(
+        `/admin/opportunities/bulk-import/template?type=${type}&format=${format}`,
+        { responseType: 'blob' },
+      );
+      const mime =
+        format === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'text/csv;charset=utf-8';
+      const blob = new Blob([res.data], { type: mime });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `sterling_${type.toLowerCase()}_opportunities_template.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // Fallback for CSV if API fails
+      if (format === 'csv') {
+        if (type === 'EMPLOYMENT') handleDownloadEmploymentTemplate();
+        else handleDownloadScholarshipTemplate();
+      }
+    }
+  };
+
   const handleDownloadEmploymentTemplate = () => {
     const csvContent =
       'data:text/csv;charset=utf-8,' +
@@ -153,18 +181,39 @@ export const AdminBulkImportPage: React.FC = () => {
 
         {/* Template Downloads */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleDownloadEmploymentTemplate}
-            className="inline-flex items-center px-3 py-1.5 text-xs font-bold text-blue-900 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 shadow-xs cursor-pointer transition"
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5 text-blue-700" /> Employment CSV Template
-          </button>
-          <button
-            onClick={handleDownloadScholarshipTemplate}
-            className="inline-flex items-center px-3 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 shadow-xs cursor-pointer transition"
-          >
-            <Download className="w-3.5 h-3.5 mr-1.5 text-emerald-700" /> Scholarship CSV Template
-          </button>
+          <div className="inline-flex rounded-lg border border-blue-200 overflow-hidden shadow-xs">
+            <button
+              onClick={() => handleDownloadTemplate('EMPLOYMENT', 'csv')}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-bold text-blue-900 bg-blue-50 hover:bg-blue-100 transition border-r border-blue-200 cursor-pointer"
+              title="Download Employment CSV Template"
+            >
+              <Download className="w-3.5 h-3.5 mr-1 text-blue-700" /> Jobs .CSV
+            </button>
+            <button
+              onClick={() => handleDownloadTemplate('EMPLOYMENT', 'xlsx')}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-bold text-blue-900 bg-blue-100/70 hover:bg-blue-200/80 transition cursor-pointer"
+              title="Download Employment Excel (.xlsx) Template"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-blue-700" /> Jobs .XLSX
+            </button>
+          </div>
+
+          <div className="inline-flex rounded-lg border border-emerald-200 overflow-hidden shadow-xs">
+            <button
+              onClick={() => handleDownloadTemplate('SCHOLARSHIP', 'csv')}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 transition border-r border-emerald-200 cursor-pointer"
+              title="Download Scholarship CSV Template"
+            >
+              <Download className="w-3.5 h-3.5 mr-1 text-emerald-700" /> Scholarship .CSV
+            </button>
+            <button
+              onClick={() => handleDownloadTemplate('SCHOLARSHIP', 'xlsx')}
+              className="inline-flex items-center px-2.5 py-1.5 text-xs font-bold text-emerald-900 bg-emerald-100/70 hover:bg-emerald-200/80 transition cursor-pointer"
+              title="Download Scholarship Excel (.xlsx) Template"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 mr-1 text-emerald-700" /> Scholarship .XLSX
+            </button>
+          </div>
         </div>
       </div>
 
@@ -275,6 +324,25 @@ export const AdminBulkImportPage: React.FC = () => {
               className="hidden"
             />
           </label>
+
+          <div className="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-slate-200/80 text-[11px] text-slate-500">
+            <span>Need sample format?</span>
+            <button
+              type="button"
+              onClick={() => handleDownloadTemplate(selectedType, 'csv')}
+              className="text-[#087b63] font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <Download size={11} /> Download {selectedType === 'EMPLOYMENT' ? 'Jobs' : 'Scholarships'} .CSV
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={() => handleDownloadTemplate(selectedType, 'xlsx')}
+              className="text-[#087b63] font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+            >
+              <FileSpreadsheet size={11} /> Download .XLSX (Excel)
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 flex justify-between items-center">

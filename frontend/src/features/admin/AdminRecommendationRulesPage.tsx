@@ -28,14 +28,23 @@ export const AdminRecommendationRulesPage: React.FC = () => {
 
   // Delete rule state
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchRules = async () => {
     setIsLoading(true);
     setErrorMsg(null);
+    setSelectedIds([]);
     try {
       const res = await api.get('/admin/recommendation-rules');
       setData(res.data);
+      if (res.data?.canonicalProducts?.length > 0) {
+        setCourseCode((prev) => prev || res.data.canonicalProducts[0].courseCode);
+      }
+      if (res.data?.diagnosticDimensions?.length > 0) {
+        setCategoryId((prev) => prev || res.data.diagnosticDimensions[0].id);
+      }
     } catch (err: any) {
       setErrorMsg(err.response?.data?.message || 'Failed to load recommendation rules.');
     } finally {
@@ -134,6 +143,36 @@ export const AdminRecommendationRulesPage: React.FC = () => {
     }
   };
 
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === (data?.rules?.length || 0) && (data?.rules?.length || 0) > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds((data?.rules || []).map((r: any) => r.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const executeBulkDeleteRules = async () => {
+    if (selectedIds.length === 0) return;
+    setIsDeleting(true);
+    try {
+      const res = await api.post('/admin/recommendation-rules/bulk-delete', { ids: selectedIds });
+      toast(`Successfully deleted ${res.data.deletedCount} recommendation rules.`);
+      setSelectedIds([]);
+      setIsBulkDeleteModalOpen(false);
+      fetchRules();
+    } catch (err: any) {
+      toast(err.response?.data?.message || 'Failed to delete selected rules.', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header A09 */}
@@ -173,6 +212,32 @@ export const AdminRecommendationRulesPage: React.FC = () => {
         </div>
       )}
 
+      {/* Bulk Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-amber-900">
+              {selectedIds.length} {selectedIds.length === 1 ? 'rule' : 'rules'} selected
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1 text-xs text-slate-600 hover:text-slate-800 font-medium cursor-pointer"
+            >
+              Deselect all
+            </button>
+            <button
+              onClick={() => setIsBulkDeleteModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Rules Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         {isLoading ? (
@@ -184,10 +249,22 @@ export const AdminRecommendationRulesPage: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        (data?.rules?.length || 0) > 0 &&
+                        selectedIds.length === data.rules.length
+                      }
+                      onChange={handleToggleSelectAll}
+                      className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                      title="Select all"
+                    />
+                  </th>
                   <th className="py-3 px-4">Rule Name</th>
                   <th className="py-3 px-4">Diagnostic Dimension</th>
                   <th className="py-3 px-4">Readiness Band</th>
-                  <th className="py-3 px-4">Canonical Product Code</th>
+                  <th className="py-3 px-4">Recommended Course</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -195,24 +272,47 @@ export const AdminRecommendationRulesPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {data?.rules?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500">
+                  <td colSpan={7} className="py-12 text-center text-slate-500">
                     No recommendation rules mapped yet. Click "+ Create rule" to map a diagnostic category to an Academy course.
                   </td>
                 </tr>
               ) : (
-                data?.rules?.map((rule: any) => (
-                  <tr key={rule.id} className="hover:bg-slate-50 transition">
-                    <td className="py-3 px-4 font-semibold text-slate-900">{rule.ruleName}</td>
-                    <td className="py-3 px-4 font-mono text-slate-700">{rule.categoryId}</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-800">
-                        {rule.readinessBand}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-slate-900">
-                      {rule.courseCode}
-                    </td>
-                    <td className="py-3 px-4">
+                data?.rules?.map((rule: any) => {
+                  const matchedCourse = data?.canonicalProducts?.find(
+                    (c: any) => c.courseCode === rule.courseCode
+                  );
+                  return (
+                    <tr
+                      key={rule.id}
+                      className={`hover:bg-slate-50 transition ${
+                        selectedIds.includes(rule.id) ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <td className="py-3 px-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(rule.id)}
+                          onChange={() => handleToggleSelectOne(rule.id)}
+                          className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-slate-900">{rule.ruleName}</td>
+                      <td className="py-3 px-4 font-mono text-slate-700">
+                        <span className="font-bold">{rule.categoryId}</span>
+                        {(() => {
+                          const cat = data?.diagnosticDimensions?.find((d: any) => d.id === rule.categoryId);
+                          return cat ? <span className="text-xs text-slate-500 font-sans block">{cat.name}</span> : null;
+                        })()}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-800">
+                          {rule.readinessBand}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-slate-900">
+                        {matchedCourse?.title || rule.courseCode}
+                      </td>
+                      <td className="py-3 px-4">
                       <span
                         className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                           rule.isActive
@@ -254,8 +354,9 @@ export const AdminRecommendationRulesPage: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })
+            )}
             </tbody>
           </table>
         </div>
@@ -326,7 +427,7 @@ export const AdminRecommendationRulesPage: React.FC = () => {
                 >
                   {data?.canonicalProducts?.map((course: any) => (
                     <option key={course.courseCode} value={course.courseCode}>
-                      {course.courseCode}: {course.title} {course.isFree ? '(Free)' : ''}
+                      {course.title} {course.isFree ? '(Free)' : ''}
                     </option>
                   ))}
                 </select>
@@ -453,7 +554,7 @@ export const AdminRecommendationRulesPage: React.FC = () => {
                 >
                   {data?.canonicalProducts?.map((course: any) => (
                     <option key={course.courseCode} value={course.courseCode}>
-                      {course.courseCode}: {course.title} {course.isFree ? '(Free)' : ''}
+                      {course.title} {course.isFree ? '(Free)' : ''}
                     </option>
                   ))}
                 </select>
@@ -489,6 +590,19 @@ export const AdminRecommendationRulesPage: React.FC = () => {
         title={`Delete recommendation rule?`}
         description={`Are you sure you want to delete rule "${deleteTarget?.ruleName}"? Candidates in band ${deleteTarget?.readinessBand} will no longer receive this automated pathway recommendation.`}
         confirmLabel="Delete Rule"
+        cancelLabel="Cancel"
+        variant="danger"
+        icon="warning"
+        isLoading={isDeleting}
+      />
+      {/* Bulk Delete Rules Confirmation */}
+      <ConfirmationModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={executeBulkDeleteRules}
+        title={`Delete ${selectedIds.length} recommendation rules?`}
+        description={`Are you sure you want to permanently delete these ${selectedIds.length} selected recommendation rules? This action cannot be undone.`}
+        confirmLabel={isDeleting ? 'Deleting...' : `Delete ${selectedIds.length} Rules`}
         cancelLabel="Cancel"
         variant="danger"
         icon="warning"

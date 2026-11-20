@@ -13,7 +13,9 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserRole, UserStatus, OpportunityType, OpportunityStatus, Pathway, TaxonomyType } from '@prisma/client';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -94,6 +96,15 @@ export class AdminController {
     return this.adminService.deleteUser(id, req.user.id, ipAddress);
   }
 
+  @Post('users/bulk-delete')
+  async bulkDeleteUsers(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteUsers(ids, req.user.id, ipAddress);
+  }
+
   // ==========================================
   // A04, A05, A06: Opportunities Management
   // ==========================================
@@ -146,9 +157,39 @@ export class AdminController {
     return this.adminService.deleteOpportunity(id, req.user.id, ipAddress);
   }
 
+  @Post('opportunities/bulk-delete')
+  async bulkDeleteOpportunities(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteOpportunities(ids, req.user.id, ipAddress);
+  }
+
+  @Post('opportunities/sync')
+  async syncOpportunitiesFromApi(@Body('url') customUrl?: string) {
+    return this.adminService.syncOpportunitiesFromApi(customUrl);
+  }
+
   // ==========================================
   // A07: Bulk Importer
   // ==========================================
+  @Get('opportunities/bulk-import/template')
+  async downloadImportTemplate(
+    @Query('type') type: OpportunityType,
+    @Query('format') format: string,
+    @Res() res: Response,
+  ) {
+    const targetFormat = format?.toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+    const template = await this.adminService.generateImportTemplate(
+      type || OpportunityType.EMPLOYMENT,
+      targetFormat,
+    );
+    res.setHeader('Content-Type', template.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${template.filename}"`);
+    res.send(template.buffer);
+  }
+
   @Post('opportunities/bulk-import/preview')
   @UseInterceptors(FileInterceptor('file'))
   async previewBulkImport(
@@ -254,6 +295,15 @@ export class AdminController {
     return this.adminService.deleteAssessmentVersion(id, req.user.id, ipAddress);
   }
 
+  @Post('assessment-versions/bulk-delete')
+  async bulkDeleteAssessmentVersions(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteAssessmentVersions(ids, req.user.id, ipAddress);
+  }
+
   @Put('assessment-versions/questions/:questionId')
   async updateAssessmentQuestion(
     @Param('questionId') questionId: string,
@@ -326,6 +376,15 @@ export class AdminController {
     return this.adminService.deleteRecommendationRule(id, req.user.id, ipAddress);
   }
 
+  @Post('recommendation-rules/bulk-delete')
+  async bulkDeleteRecommendationRules(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteRecommendationRules(ids, req.user.id, ipAddress);
+  }
+
   @Patch('recommendation-rules/:id/toggle')
   async toggleRecommendationRule(
     @Param('id') id: string,
@@ -390,6 +449,15 @@ export class AdminController {
     return this.adminService.deleteTaxonomyOption(id, req.user.id, ipAddress);
   }
 
+  @Post('taxonomies/bulk-delete')
+  async bulkDeleteTaxonomies(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteTaxonomies(ids, req.user.id, ipAddress);
+  }
+
   @Delete('taxonomies/aliases/:aliasId')
   async deleteTaxonomyAlias(
     @Param('aliasId') aliasId: string,
@@ -429,6 +497,15 @@ export class AdminController {
   ) {
     const ipAddress = req.ip || req.headers['x-forwarded-for'];
     return this.adminService.deleteApplication(id, req.user.id, ipAddress);
+  }
+
+  @Post('applications-outcomes/bulk-delete')
+  async bulkDeleteApplications(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteApplications(ids, req.user.id, ipAddress);
   }
 
   // ==========================================
@@ -485,6 +562,15 @@ export class AdminController {
     return this.adminService.deleteEmailTemplate(id, req.user.id, ipAddress);
   }
 
+  @Post('email-templates/bulk-delete')
+  async bulkDeleteEmailTemplates(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkDeleteEmailTemplates(ids, req.user.id, ipAddress);
+  }
+
   @Post('email-templates/:id/test')
   async sendTestEmail(
     @Param('id') id: string,
@@ -521,6 +607,11 @@ export class AdminController {
   @Delete('email-logs/:id')
   async deleteEmailLog(@Param('id') id: string, @Req() req: any) {
     return this.adminService.deleteEmailLog(id, req.user.id);
+  }
+
+  @Post('email-logs/bulk-delete')
+  async bulkDeleteEmailLogs(@Body('ids') ids: string[], @Req() req: any) {
+    return this.adminService.bulkDeleteEmailLogs(ids, req.user.id);
   }
 
   @Delete('email-logs')
@@ -564,6 +655,15 @@ export class AdminController {
     return this.adminService.revokeStaffAccess(id, req.user, ipAddress);
   }
 
+  @Post('staff/bulk-revoke')
+  async bulkRevokeStaff(
+    @Body('ids') ids: string[],
+    @Req() req: any,
+  ) {
+    const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    return this.adminService.bulkRevokeStaff(ids, req.user, ipAddress);
+  }
+
   // ==========================================
   // A15: System Settings & Integrations
   // ==========================================
@@ -601,6 +701,11 @@ export class AdminController {
   @Delete('audit-logs/:id')
   async deleteAuditLog(@Param('id') id: string, @Req() req: any) {
     return this.adminService.deleteAuditLog(id, req.user.id);
+  }
+
+  @Post('audit-logs/bulk-delete')
+  async bulkDeleteAuditLogs(@Body('ids') ids: string[], @Req() req: any) {
+    return this.adminService.bulkDeleteAuditLogs(ids, req.user.id);
   }
 
   @Delete('audit-logs')

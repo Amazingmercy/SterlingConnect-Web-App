@@ -53,6 +53,7 @@ export interface RecommendedCourse {
   priceNGN?: number;
   academyUrl: string;
   description: string;
+  thumbnailUrl?: string;
   rating?: string;
   format?: 'Sterling Short' | 'Course';
   access?: 'Free' | 'Paid';
